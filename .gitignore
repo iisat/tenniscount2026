@@ -20,3 +20,4 @@ local.properties
 # Прочее
 *.log
 .DS_Store
+logcat-test.txt
