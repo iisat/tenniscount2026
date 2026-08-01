@@ -46,6 +46,7 @@ import com.tenniscount.app.score.Player
 import com.tenniscount.app.ui.MatchUiState
 import com.tenniscount.app.ui.MatchViewModel
 import com.tenniscount.app.service.MicState
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 @Composable
@@ -324,8 +325,12 @@ private fun SignalVolumeRow(state: MatchUiState, viewModel: MatchViewModel) {
             value = state.signalVolume,
             onValueChange = viewModel::setSignalVolume,
             onValueChangeFinished = viewModel::previewSignal,
-            valueRange = 0.1f..1f,
+            valueRange = 0.5f..1.5f,
             modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "${(state.signalVolume * 100).roundToInt()}%",
+            style = MaterialTheme.typography.bodyMedium,
         )
     }
 }

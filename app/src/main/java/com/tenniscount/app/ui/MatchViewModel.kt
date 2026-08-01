@@ -5,10 +5,8 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
-import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
-import android.media.ToneGenerator
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -38,7 +36,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 enum class Screen { SETUP, SCOREBOARD, HISTORY }
 
@@ -60,7 +57,7 @@ data class MatchUiState(
     val lastHeard: String = "",
     /** Предупреждение о противоречии объявления текущему счёту. */
     val warning: String? = null,
-    /** Относительная громкость сигналов приложения (0.1–1.0 от медиа-громкости). */
+    /** Относительная громкость сигналов приложения (50–150% от медиа-громкости). */
     val signalVolume: Float = 1f,
 ) {
     fun name(player: Player): String = when (player) {
@@ -85,9 +82,6 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private val controller = ListeningController.get(application)
     private val db = MatchDatabase.get(application)
-
-    // Медиа-канал: слышен и в беззвучном режиме, громкость регулируется кнопками.
-    private var toneGenerator = createToneGenerator(_uiState.value.signalVolume)
 
     /** Завершённые матчи (история), новые сверху. */
     val history: StateFlow<List<FinishedMatchEntity>> = db.matchDao().observeAll()
@@ -335,34 +329,24 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Регулировка громкости сигналов относительно медиа-громкости (музыка в наушниках). */
     fun setSignalVolume(volume: Float) {
-        val clamped = volume.coerceIn(0.1f, 1f)
+        val clamped = volume.coerceIn(0.5f, 1.5f)
         _uiState.update { it.copy(signalVolume = clamped) }
         prefs.edit { putFloat(KEY_SIGNAL_VOLUME, clamped) }
-        // Громкость ToneGenerator задаётся только при создании — пересоздаём.
-        toneGenerator.release()
-        toneGenerator = createToneGenerator(clamped)
     }
 
     /** Пробный beep при отпускании слайдера громкости. */
     fun previewSignal() = beep()
 
-    private fun createToneGenerator(volume: Float) =
-        ToneGenerator(AudioManager.STREAM_MUSIC, (volume * 100).roundToInt().coerceIn(1, 100))
-
     /** Короткий beep — подтверждение, что объявление услышано, не глядя на экран. */
     private fun beep() {
-        val ok = runCatching {
-            toneGenerator.startTone(ToneGenerator.TONE_PROP_ACK, 150)
-        }.getOrDefault(false)
-        Log.d(TAG, "beep: startTone=$ok")
+        Log.d(TAG, "beep: volume=${_uiState.value.signalVolume}")
+        SignalPlayer.accept(_uiState.value.signalVolume)
     }
 
     /** Низкий двойной сигнал — команда распознана, но отклонена. */
     private fun nack() {
-        val ok = runCatching {
-            toneGenerator.startTone(ToneGenerator.TONE_PROP_NACK, 200)
-        }.getOrDefault(false)
-        Log.d(TAG, "nack: startTone=$ok")
+        Log.d(TAG, "nack: volume=${_uiState.value.signalVolume}")
+        SignalPlayer.reject(_uiState.value.signalVolume)
     }
 
     /** Звонок при выигранном гейме; тройной — если этим геймом завершён сет. */
@@ -409,7 +393,6 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         controller.listener = null
         controller.onPauseToggleRequested = null
         controller.onStopRequested = null
-        toneGenerator.release()
     }
 
     private fun sync(screen: Screen? = null) {
