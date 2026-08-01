@@ -1,0 +1,181 @@
+package com.tenniscount.app.score
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class MatchEngineTest {
+
+    private fun MatchEngine.playGame(winner: Player) = winGame(winner)
+
+    private fun MatchEngine.playSet(p1Games: Int, p2Games: Int) {
+        repeat(maxOf(p1Games, p2Games)) { i ->
+            if (i < p1Games) playGame(Player.ONE)
+            if (i < p2Games) playGame(Player.TWO)
+        }
+    }
+
+    @Test
+    fun `server alternates every game starting from first server`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        assertEquals(Player.ONE, engine.state.server)
+
+        engine.playGame(Player.ONE)
+        assertEquals(Player.TWO, engine.state.server)
+
+        engine.playGame(Player.TWO)
+        assertEquals(Player.ONE, engine.state.server)
+
+        val engine2 = MatchEngine(firstServer = Player.TWO)
+        assertEquals(Player.TWO, engine2.state.server)
+        engine2.playGame(Player.ONE)
+        assertEquals(Player.ONE, engine2.state.server)
+    }
+
+    @Test
+    fun `announced points are server-relative and mapped to players`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+
+        // Подаёт игрок 1: «15-0» -> очко игроку 1.
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(1, 0)))
+        assertEquals(1, engine.state.currentSet.currentGame.pointsP1)
+        assertEquals(0, engine.state.currentSet.currentGame.pointsP2)
+
+        // После гейма подаёт игрок 2: «15-0» -> очко игроку 2.
+        engine.playGame(Player.ONE)
+        assertEquals(Player.TWO, engine.state.server)
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(1, 0)))
+        assertEquals(0, engine.state.currentSet.currentGame.pointsP1)
+        assertEquals(1, engine.state.currentSet.currentGame.pointsP2)
+    }
+
+    @Test
+    fun `full game by announcements 0-0 to game`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(1, 0))) // 15-0
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(1, 1))) // 15-15
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(2, 1))) // 30-15
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(3, 1))) // 40-15
+        engine.winGame(Player.ONE) // «гейм»
+        assertEquals(1, engine.state.currentSet.gamesP1)
+        assertEquals(GameState(), engine.state.currentSet.currentGame)
+    }
+
+    @Test
+    fun `announcement lower than current is rejected without changing state`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.applyAnnouncement(Announcement.Points(2, 1)) // 30-15
+        val before = engine.state
+
+        val result = engine.applyAnnouncement(Announcement.Points(1, 0)) // 15-0 — меньше текущего
+
+        assertEquals(ApplyResult.Rejected(RejectionReason.BACKWARD), result)
+        assertEquals(before, engine.state)
+    }
+
+    @Test
+    fun `duplicate announcement is rejected`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.applyAnnouncement(Announcement.Points(2, 2)) // 30-30
+        val result = engine.applyAnnouncement(Announcement.Points(2, 2))
+        assertEquals(ApplyResult.Rejected(RejectionReason.DUPLICATE), result)
+    }
+
+    @Test
+    fun `invalid announcement values are rejected`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        val result = engine.applyAnnouncement(Announcement.Points(5, 0))
+        assertEquals(ApplyResult.Rejected(RejectionReason.INVALID), result)
+    }
+
+    @Test
+    fun `deuce and advantage announcements`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.applyAnnouncement(Announcement.Points(3, 2)) // 40-30
+
+        // «ровно»: подающий — игрок 1
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Deuce))
+        assertTrue(engine.state.currentSet.currentGame.isDeuce)
+
+        // «больше» у подающего (игрок 1)
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Advantage(toServer = true)))
+        assertEquals(Player.ONE, engine.state.currentSet.currentGame.advantagePlayer)
+
+        // повторное «больше» — дубликат
+        assertEquals(
+            ApplyResult.Rejected(RejectionReason.DUPLICATE),
+            engine.applyAnnouncement(Announcement.Advantage(toServer = true)),
+        )
+
+        // «ровно» после advantage — принимающий сравнял
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Deuce))
+        assertTrue(engine.state.currentSet.currentGame.isDeuce)
+    }
+
+    @Test
+    fun `undo restores previous state including server`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.playGame(Player.ONE)
+        assertEquals(Player.TWO, engine.state.server)
+
+        assertTrue(engine.undo())
+        assertEquals(Player.ONE, engine.state.server)
+        assertEquals(MatchState(firstServer = Player.ONE), engine.state)
+        assertFalse(engine.undo()) // больше нечего отменять
+    }
+
+    @Test
+    fun `sets are unlimited - match continues after set ends`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.playSet(p1Games = 6, p2Games = 4)
+
+        assertEquals(listOf(SetScore(6, 4)), engine.state.completedSets)
+        assertEquals(SetState(), engine.state.currentSet)
+
+        // Матч не завершён — следующий сет начался автоматически.
+        engine.playSet(p1Games = 2, p2Games = 6)
+        assertEquals(listOf(SetScore(6, 4), SetScore(2, 6)), engine.state.completedSets)
+
+        // Подающий корректно определяется по общему числу геймов матча (10 + 8 = 18 -> чётное).
+        assertEquals(Player.ONE, engine.state.server)
+        engine.playGame(Player.ONE)
+        assertEquals(Player.TWO, engine.state.server)
+    }
+
+    @Test
+    fun `manual game score edit applies winning state as game win`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.editGameScore(3, 2) // 40-30
+        assertEquals(3, engine.state.currentSet.currentGame.pointsP1)
+
+        engine.editGameScore(4, 1) // выигранный гейм -> засчитывается гейм
+        assertEquals(1, engine.state.currentSet.gamesP1)
+        assertEquals(GameState(), engine.state.currentSet.currentGame)
+        assertEquals(Player.TWO, engine.state.server)
+    }
+
+    @Test
+    fun `manual set score edit closes finished set`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.playGame(Player.ONE) // 1:0
+        engine.editSetScore(6, 4) // сет завершён -> переносится в историю
+
+        assertEquals(listOf(SetScore(6, 4)), engine.state.completedSets)
+        assertEquals(SetState(), engine.state.currentSet)
+
+        assertTrue(engine.undo()) // правку можно отменить
+        assertEquals(0, engine.state.completedSets.size)
+        assertEquals(1, engine.state.currentSet.gamesP1)
+        assertEquals(0, engine.state.currentSet.gamesP2)
+    }
+
+    @Test
+    fun `log records events`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.addPoint(Player.ONE)
+        engine.applyAnnouncement(Announcement.Points(1, 1))
+        engine.undo()
+        assertEquals(3, engine.log.size)
+    }
+}
