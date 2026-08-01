@@ -1,6 +1,7 @@
 package com.tenniscount.app.service
 
 import android.content.Context
+import android.util.Log
 import com.tenniscount.app.speech.ModelManager
 import com.tenniscount.app.speech.VoskRecognizer
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,11 +47,13 @@ class ListeningController private constructor(context: Context) {
         }
 
         override fun onFinalResult(text: String) {
+            Log.d(TAG, "распознано: «$text»")
             _state.update { it.copy(lastHeard = text) }
             listener?.onFinalResult(text)
         }
 
         override fun onError(message: String) {
+            Log.e(TAG, "ошибка распознавания: $message")
             _state.update { it.copy(micState = MicState.ERROR, error = message) }
             listener?.onError(message)
         }
@@ -65,6 +68,7 @@ class ListeningController private constructor(context: Context) {
      * доступ к микрофону из фона).
      */
     suspend fun start(): Boolean {
+        Log.i(TAG, "start: запуск прослушивания")
         _state.update { it.copy(error = null) }
         return try {
             if (!modelManager.isModelReady()) {
@@ -77,13 +81,16 @@ class ListeningController private constructor(context: Context) {
             _state.update { it.copy(micState = MicState.PREPARING) }
             recognizer.prepare()
             if (recognizer.start()) {
+                Log.i(TAG, "start: микрофон слушает")
                 _state.update { it.copy(micState = MicState.LISTENING) }
                 true
             } else {
+                Log.w(TAG, "start: не удалось запустить микрофон")
                 _state.update { it.copy(micState = MicState.ERROR) }
                 false
             }
         } catch (e: Exception) {
+            Log.e(TAG, "start: ошибка подготовки", e)
             _state.update {
                 it.copy(
                     micState = MicState.ERROR,
@@ -96,14 +103,20 @@ class ListeningController private constructor(context: Context) {
     }
 
     /** Пауза прослушивания без остановки сервиса (экономия батареи). */
-    fun setPaused(paused: Boolean) = recognizer.setPaused(paused)
+    fun setPaused(paused: Boolean) {
+        Log.i(TAG, "setPaused: $paused")
+        recognizer.setPaused(paused)
+    }
 
     fun stop() {
+        Log.i(TAG, "stop: прослушивание остановлено")
         recognizer.stop()
         _state.update { it.copy(micState = MicState.OFF, lastHeard = "") }
     }
 
     companion object {
+        private const val TAG = "ListeningController"
+
         @Volatile
         private var instance: ListeningController? = null
 

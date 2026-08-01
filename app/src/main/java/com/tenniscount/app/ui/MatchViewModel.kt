@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -267,8 +268,12 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         when (command) {
             is VoiceCommand.Score ->
                 when (val result = currentEngine.applyAnnouncement(command.announcement)) {
-                    ApplyResult.Applied -> beep()
+                    ApplyResult.Applied -> {
+                        Log.d(TAG, "счёт применён: «$rawText»")
+                        beep()
+                    }
                     is ApplyResult.Rejected -> {
+                        Log.d(TAG, "счёт отклонён (${result.reason}): «$rawText»")
                         currentEngine.logNote(
                             when (result.reason) {
                                 RejectionReason.BACKWARD -> "→ не применено: меньше текущего счёта"
@@ -332,5 +337,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         updateNotification()
+    }
+
+    private companion object {
+        const val TAG = "MatchViewModel"
     }
 }

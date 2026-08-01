@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.tenniscount.app.MainActivity
@@ -29,6 +30,7 @@ class ListeningService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.i(TAG, "onStartCommand: action=${intent?.action ?: "START"}")
         when (intent?.action) {
             ACTION_STOP -> {
                 ListeningController.get(this).onStopRequested?.invoke()
@@ -113,6 +115,7 @@ class ListeningService : Service() {
     }
 
     companion object {
+        private const val TAG = "ListeningService"
         private const val CHANNEL_ID = "listening"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "com.tenniscount.app.action.STOP"
