@@ -65,7 +65,7 @@ class MatchEngineTest {
     @Test
     fun `announcement lower than current is rejected without changing state`() {
         val engine = MatchEngine(firstServer = Player.ONE)
-        engine.applyAnnouncement(Announcement.Points(2, 1)) // 30-15
+        engine.editGameScore(2, 1) // 30-15
         val before = engine.state
 
         val result = engine.applyAnnouncement(Announcement.Points(1, 0)) // 15-0 — меньше текущего
@@ -77,9 +77,26 @@ class MatchEngineTest {
     @Test
     fun `duplicate announcement is rejected`() {
         val engine = MatchEngine(firstServer = Player.ONE)
-        engine.applyAnnouncement(Announcement.Points(2, 2)) // 30-30
+        engine.editGameScore(2, 2) // 30-30
         val result = engine.applyAnnouncement(Announcement.Points(2, 2))
         assertEquals(ApplyResult.Rejected(RejectionReason.DUPLICATE), result)
+    }
+
+    @Test
+    fun `skipping points is rejected without changing state`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.applyAnnouncement(Announcement.Points(1, 0)) // 15-0
+        val before = engine.state
+
+        // 15-30 недостижимо из 15-0 за один розыгрыш.
+        val result = engine.applyAnnouncement(Announcement.Points(1, 2))
+
+        assertEquals(ApplyResult.Rejected(RejectionReason.SKIP), result)
+        assertEquals(before, engine.state)
+
+        // А допустимые шаги проходят: +1 очко любому игроку.
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(1, 1))) // 15-15
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(2, 1))) // 30-15
     }
 
     @Test
@@ -92,7 +109,7 @@ class MatchEngineTest {
     @Test
     fun `deuce and advantage announcements`() {
         val engine = MatchEngine(firstServer = Player.ONE)
-        engine.applyAnnouncement(Announcement.Points(3, 2)) // 40-30
+        engine.editGameScore(3, 2) // 40-30
 
         // «ровно»: подающий — игрок 1
         assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Deuce))

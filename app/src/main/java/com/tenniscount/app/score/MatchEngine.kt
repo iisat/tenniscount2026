@@ -24,6 +24,9 @@ enum class RejectionReason {
 
     /** Недопустимые значения. */
     INVALID,
+
+    /** Объявленный счёт недостижим из текущего за один розыгрыш (перескок). */
+    SKIP,
 }
 
 sealed interface ApplyResult {
@@ -90,10 +93,13 @@ class MatchEngine(firstServer: Player) {
                 if (p1 !in 0..3 || p2 !in 0..3) return ApplyResult.Rejected(RejectionReason.INVALID)
 
                 val announced = GameState(p1, p2)
+                val gained = (p1 - game.pointsP1) + (p2 - game.pointsP2)
                 when {
                     announced == game -> ApplyResult.Rejected(RejectionReason.DUPLICATE)
                     p1 < game.pointsP1 || p2 < game.pointsP2 ->
                         ApplyResult.Rejected(RejectionReason.BACKWARD)
+                    // За один розыгрыш разыгрывается одно очко: перескок невозможен.
+                    gained > 1 -> ApplyResult.Rejected(RejectionReason.SKIP)
                     else -> {
                         mutate(
                             state.withCurrentGame(announced),

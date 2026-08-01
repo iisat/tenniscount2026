@@ -290,9 +290,12 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                                 RejectionReason.BACKWARD -> "→ не применено: меньше текущего счёта"
                                 RejectionReason.DUPLICATE -> "→ дубликат, пропущено"
                                 RejectionReason.INVALID -> "→ недопустимые значения, пропущено"
+                                RejectionReason.SKIP -> "→ не применено: перескок счёта"
                             },
                         )
-                        if (result.reason == RejectionReason.BACKWARD) {
+                        if (result.reason == RejectionReason.BACKWARD ||
+                            result.reason == RejectionReason.SKIP
+                        ) {
                             _uiState.update {
                                 it.copy(warning = "Противоречие: «$rawText» — счёт не изменён")
                             }
@@ -354,7 +357,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                         play()
                     }
                 }.onFailure { Log.w(TAG, "ring: ошибка воспроизведения", it) }
-                if (i < times - 1) delay(1_200)
+                if (i < times - 1) delay(400)
             }
         }
     }
