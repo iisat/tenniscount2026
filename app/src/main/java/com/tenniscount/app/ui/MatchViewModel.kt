@@ -71,7 +71,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private val _uiState = MutableStateFlow(
-        MatchUiState(signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 1f)),
+        // coerceIn: в старой версии диапазон был 0.1–1.0 — значение могло остаться ниже 0.5.
+        MatchUiState(signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 1f).coerceIn(0.5f, 1.5f)),
     )
     val uiState: StateFlow<MatchUiState> = _uiState.asStateFlow()
 
