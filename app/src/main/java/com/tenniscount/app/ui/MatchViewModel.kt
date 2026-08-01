@@ -68,7 +68,16 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
         override fun onFinalResult(text: String) {
             _uiState.update { it.copy(lastHeard = text) }
-            ScoreParser.parse(text)?.let { applyVoiceCommand(it, text) }
+            val command = ScoreParser.parse(text)
+            if (command == null) {
+                val s = _uiState.value
+                if (!s.paused && !s.finished) {
+                    engine?.logNote("Слышал: «$text» — не счёт")
+                    sync()
+                }
+                return
+            }
+            applyVoiceCommand(command, text)
         }
 
         override fun onError(message: String) {
@@ -202,13 +211,23 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         if (s.paused || s.finished) return
         val currentEngine = engine ?: return
 
+        currentEngine.logNote("Распознано: «$rawText»")
         when (command) {
             is VoiceCommand.Score ->
                 when (val result = currentEngine.applyAnnouncement(command.announcement)) {
                     ApplyResult.Applied -> beep()
-                    is ApplyResult.Rejected -> if (result.reason == RejectionReason.BACKWARD) {
-                        _uiState.update {
-                            it.copy(warning = "Противоречие: «$rawText» — счёт не изменён")
+                    is ApplyResult.Rejected -> {
+                        currentEngine.logNote(
+                            when (result.reason) {
+                                RejectionReason.BACKWARD -> "→ не применено: меньше текущего счёта"
+                                RejectionReason.DUPLICATE -> "→ дубликат, пропущено"
+                                RejectionReason.INVALID -> "→ недопустимые значения, пропущено"
+                            },
+                        )
+                        if (result.reason == RejectionReason.BACKWARD) {
+                            _uiState.update {
+                                it.copy(warning = "Противоречие: «$rawText» — счёт не изменён")
+                            }
                         }
                     }
                 }

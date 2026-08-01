@@ -60,6 +60,11 @@ class MatchEngine(firstServer: Player) {
         mutate(state.withGameWon(player), "Гейм: ${player.displayName}")
     }
 
+    /** Запись в лог без изменения состояния (диагностика распознавания и т.п.). */
+    fun logNote(entry: String) {
+        _log += entry
+    }
+
     /** Отмена последнего действия. Возвращает false, если отменять нечего. */
     fun undo(): Boolean {
         val previous = undoStack.removeLastOrNull() ?: return false
