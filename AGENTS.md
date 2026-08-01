@@ -22,10 +22,15 @@
 
 - Задание и статус этапов (M1–M5): `task.md` — при возобновлении читать его целиком.
 - Ядро счёта (чистый Kotlin, без Android-зависимостей): `app/src/main/java/com/tenniscount/app/score/`.
-- Тесты: `app/src/test/java/com/tenniscount/app/score/`.
+- Распознавание речи: `app/src/main/java/com/tenniscount/app/speech/` —
+  `ScoreParser.kt` (чистый Kotlin, unit-тесты), `ModelManager.kt` (скачивание русской
+  small-модели Vosk ~45 МБ при первом запуске), `VoskRecognizer.kt` (обёртка над Vosk,
+  грамматика ограничена словами счёта).
+- Тесты: `app/src/test/java/com/tenniscount/app/score/` и `.../speech/`.
 
 ## Особенности
 
 - PowerShell: heredoc-синтаксис bash (`cat <<'EOF'`) не работает — для длинных сообщений
   коммита использовать несколько флагов `git commit -m ... -m ...`.
-- В AndroidManifest пока нет Activity и темы — они появятся на этапе M2 (UI).
+- ASR: Vosk `com.alphacephei:vosk-android:0.3.47` (Maven Central). Разрешения
+  RECORD_AUDIO (runtime-запрос на табло) и INTERNET (только для загрузки модели) — в манифесте.

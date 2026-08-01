@@ -1,5 +1,9 @@
 package com.tenniscount.app.ui.scoreboard
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,18 +30,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.tenniscount.app.R
 import com.tenniscount.app.score.GameState
 import com.tenniscount.app.score.MatchState
 import com.tenniscount.app.score.Player
 import com.tenniscount.app.ui.MatchUiState
 import com.tenniscount.app.ui.MatchViewModel
+import com.tenniscount.app.ui.MicState
+import kotlinx.coroutines.delay
 
 @Composable
 fun ScoreboardScreen(state: MatchUiState, viewModel: MatchViewModel) {
@@ -86,6 +94,8 @@ fun ScoreboardScreen(state: MatchUiState, viewModel: MatchViewModel) {
         }
 
         SetsLine(match)
+
+        MicControl(state, viewModel)
 
         LogView(state.log, modifier = Modifier.heightIn(max = 96.dp).fillMaxWidth())
 
@@ -215,6 +225,84 @@ private fun SetsLine(match: MatchState) {
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
     )
+}
+
+/**
+ * Управление прослушиванием: кнопка вкл/выкл, индикатор состояния микрофона,
+ * последняя услышанная фраза и предупреждение о противоречии счёта.
+ */
+@Composable
+private fun MicControl(state: MatchUiState, viewModel: MatchViewModel) {
+    val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> if (granted) viewModel.toggleListening() }
+
+    val listening = state.micState == MicState.LISTENING
+    val busy = state.micState == MicState.DOWNLOADING || state.micState == MicState.PREPARING
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(
+                onClick = {
+                    val granted = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.RECORD_AUDIO,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (granted) viewModel.toggleListening()
+                    else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                },
+                enabled = !busy && !state.finished,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(stringResource(if (listening) R.string.listen_stop else R.string.listen_start))
+            }
+            Text(
+                text = micStatusText(state),
+                style = MaterialTheme.typography.bodyMedium,
+                color = when (state.micState) {
+                    MicState.ERROR -> MaterialTheme.colorScheme.error
+                    MicState.LISTENING -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.weight(2f),
+            )
+        }
+
+        if (listening && state.lastHeard.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.heard_prefix, state.lastHeard),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        state.warning?.let { warning ->
+            Text(
+                text = warning,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            LaunchedEffect(warning) {
+                delay(4_000)
+                viewModel.clearWarning()
+            }
+        }
+    }
+}
+
+@Composable
+private fun micStatusText(state: MatchUiState): String = when (state.micState) {
+    MicState.OFF -> ""
+    MicState.DOWNLOADING -> state.downloadProgress
+        ?.let { stringResource(R.string.model_downloading, it) }
+        ?: stringResource(R.string.mic_preparing)
+    MicState.PREPARING -> stringResource(R.string.mic_preparing)
+    MicState.LISTENING -> stringResource(R.string.mic_listening)
+    MicState.ERROR -> stringResource(R.string.mic_error, state.micError.orEmpty())
 }
 
 @Composable
