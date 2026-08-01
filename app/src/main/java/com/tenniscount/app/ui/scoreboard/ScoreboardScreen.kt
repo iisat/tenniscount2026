@@ -44,7 +44,7 @@ import com.tenniscount.app.score.MatchState
 import com.tenniscount.app.score.Player
 import com.tenniscount.app.ui.MatchUiState
 import com.tenniscount.app.ui.MatchViewModel
-import com.tenniscount.app.ui.MicState
+import com.tenniscount.app.service.MicState
 import kotlinx.coroutines.delay
 
 @Composable
@@ -235,8 +235,19 @@ private fun SetsLine(match: MatchState) {
 private fun MicControl(state: MatchUiState, viewModel: MatchViewModel) {
     val context = LocalContext.current
     val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted -> if (granted) viewModel.toggleListening() }
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (grants[Manifest.permission.RECORD_AUDIO] == true) viewModel.toggleListening()
+    }
+
+    // Микрофон обязателен; уведомление (Android 13+) — для отображения
+    // foreground service, без него прослушивание всё равно работает.
+    val requiredPermissions = buildList {
+        add(Manifest.permission.RECORD_AUDIO)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }.toTypedArray()
 
     val listening = state.micState == MicState.LISTENING
     val busy = state.micState == MicState.DOWNLOADING || state.micState == MicState.PREPARING
@@ -253,7 +264,7 @@ private fun MicControl(state: MatchUiState, viewModel: MatchViewModel) {
                         context, Manifest.permission.RECORD_AUDIO,
                     ) == PackageManager.PERMISSION_GRANTED
                     if (granted) viewModel.toggleListening()
-                    else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    else permissionLauncher.launch(requiredPermissions)
                 },
                 enabled = !busy && !state.finished,
                 modifier = Modifier.weight(1f),

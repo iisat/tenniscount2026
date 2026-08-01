@@ -8,24 +8,30 @@ import android.media.ToneGenerator
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.tenniscount.app.data.FinishedMatchEntity
+import com.tenniscount.app.data.MatchDatabase
 import com.tenniscount.app.score.ApplyResult
 import com.tenniscount.app.score.MatchEngine
 import com.tenniscount.app.score.MatchState
+import com.tenniscount.app.score.MatchSummary
 import com.tenniscount.app.score.Player
 import com.tenniscount.app.score.RejectionReason
-import com.tenniscount.app.speech.ModelManager
+import com.tenniscount.app.service.ListeningController
+import com.tenniscount.app.service.ListeningService
+import com.tenniscount.app.service.MicState
 import com.tenniscount.app.speech.ScoreParser
 import com.tenniscount.app.speech.VoiceCommand
 import com.tenniscount.app.speech.VoskRecognizer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class Screen { SETUP, SCOREBOARD }
-
-enum class MicState { OFF, DOWNLOADING, PREPARING, LISTENING, ERROR }
+enum class Screen { SETUP, SCOREBOARD, HISTORY }
 
 /** Состояние UI матча. Имена игроков живут только в UI, ядро оперирует [Player]. */
 data class MatchUiState(
@@ -59,15 +65,18 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private var engine: MatchEngine? = null
 
-    private val modelManager = ModelManager(application.filesDir)
+    private val controller = ListeningController.get(application)
+    private val db = MatchDatabase.get(application)
+    private val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+
+    /** Завершённые матчи (история), новые сверху. */
+    val history: StateFlow<List<FinishedMatchEntity>> = db.matchDao().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val recognitionListener = object : VoskRecognizer.Listener {
-        override fun onPartialResult(text: String) {
-            _uiState.update { it.copy(lastHeard = text) }
-        }
+        override fun onPartialResult(text: String) = Unit
 
         override fun onFinalResult(text: String) {
-            _uiState.update { it.copy(lastHeard = text) }
             val command = ScoreParser.parse(text)
             if (command == null) {
                 val s = _uiState.value
@@ -80,16 +89,27 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             applyVoiceCommand(command, text)
         }
 
-        override fun onError(message: String) {
-            _uiState.update { it.copy(micState = MicState.ERROR, micError = message) }
-        }
+        override fun onError(message: String) = Unit
     }
 
-    private val recognizer = VoskRecognizer(
-        modelDir = modelManager.modelDir,
-        listener = recognitionListener,
-    )
-    private val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+    init {
+        controller.listener = recognitionListener
+        // Действия из уведомления foreground-сервиса (экран выключен).
+        controller.onPauseToggleRequested = { togglePause() }
+        controller.onStopRequested = { stopListening() }
+        viewModelScope.launch {
+            controller.state.collect { ls ->
+                _uiState.update {
+                    it.copy(
+                        micState = ls.micState,
+                        micError = ls.error,
+                        downloadProgress = ls.downloadProgress,
+                        lastHeard = ls.lastHeard,
+                    )
+                }
+            }
+        }
+    }
 
     fun setPlayer1Name(name: String) = _uiState.update { it.copy(player1Name = name) }
 
@@ -127,11 +147,17 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     fun togglePause() {
         val newPaused = !_uiState.value.paused
         _uiState.update { it.copy(paused = newPaused) }
-        recognizer.setPaused(newPaused)
+        controller.setPaused(newPaused)
+        updateNotification()
     }
 
     fun finishMatch() {
+        val state = engine?.state
+        val s = _uiState.value
         stopListening()
+        if (state != null) {
+            saveMatch(state, s.player1Name, s.player2Name, s.log)
+        }
         _uiState.update { it.copy(finished = true, paused = false) }
     }
 
@@ -145,6 +171,34 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             player2Name = s.player2Name,
             firstServer = s.firstServer,
         )
+    }
+
+    // --- История ---
+
+    fun openHistory() = _uiState.update { it.copy(screen = Screen.HISTORY) }
+
+    fun closeHistory() = _uiState.update { it.copy(screen = Screen.SETUP) }
+
+    fun deleteMatch(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) { db.matchDao().delete(id) }
+    }
+
+    private fun saveMatch(
+        state: MatchState,
+        player1Name: String,
+        player2Name: String,
+        log: List<String>,
+    ) {
+        val entity = FinishedMatchEntity(
+            finishedAt = System.currentTimeMillis(),
+            player1Name = player1Name,
+            player2Name = player2Name,
+            setsP1 = MatchSummary.setsWon(state, Player.ONE),
+            setsP2 = MatchSummary.setsWon(state, Player.TWO),
+            setsSummary = MatchSummary.setsSummary(state),
+            log = log.joinToString("\n"),
+        )
+        viewModelScope.launch(Dispatchers.IO) { db.matchDao().insert(entity) }
     }
 
     // --- Распознавание речи ---
@@ -170,40 +224,38 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(micError = null, warning = null) }
-            try {
-                if (!modelManager.isModelReady()) {
-                    _uiState.update { it.copy(micState = MicState.DOWNLOADING) }
-                    modelManager.ensureModel { progress ->
-                        _uiState.update { it.copy(downloadProgress = progress) }
-                    }
-                    _uiState.update { it.copy(downloadProgress = null) }
-                }
-                _uiState.update { it.copy(micState = MicState.PREPARING) }
-                recognizer.prepare()
-                if (recognizer.start()) {
-                    _uiState.update { it.copy(micState = MicState.LISTENING) }
-                } else {
-                    _uiState.update { it.copy(micState = MicState.ERROR) }
-                }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        micState = MicState.ERROR,
-                        downloadProgress = null,
-                        micError = e.message ?: "Ошибка подготовки распознавания",
-                    )
-                }
-            }
-        }
+        // Foreground service поднимается ДО старта микрофона: иначе Android 12+
+        // не даст доступ к микрофону при уходе приложения в фон.
+        _uiState.update { it.copy(warning = null) }
+        ContextCompat.startForegroundService(
+            context,
+            ListeningService.startIntent(context, currentScoreText()),
+        )
+        viewModelScope.launch { controller.start() }
     }
 
     fun clearWarning() = _uiState.update { it.copy(warning = null) }
 
     private fun stopListening() {
-        recognizer.stop()
-        _uiState.update { it.copy(micState = MicState.OFF, lastHeard = "") }
+        controller.stop()
+        // stopService, а не ACTION_STOP: колбэк сервиса уже привёл нас сюда,
+        // повторный интент зациклит остановку.
+        getApplication<Application>().stopService(
+            android.content.Intent(getApplication(), ListeningService::class.java)
+        )
+    }
+
+    /** Обновляет текст счёта в уведомлении, если прослушивание активно. */
+    private fun updateNotification() {
+        val s = _uiState.value
+        if (s.micState != MicState.LISTENING) return
+        val context = getApplication<Application>()
+        context.startService(ListeningService.updateIntent(context, currentScoreText(), s.paused))
+    }
+
+    private fun currentScoreText(): String {
+        val state = engine?.state ?: return ""
+        return MatchSummary.scoreLine(state)
     }
 
     private fun applyVoiceCommand(command: VoiceCommand, rawText: String) {
@@ -262,7 +314,10 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
-        recognizer.release()
+        stopListening()
+        controller.listener = null
+        controller.onPauseToggleRequested = null
+        controller.onStopRequested = null
         toneGenerator.release()
     }
 
@@ -276,5 +331,6 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 screen = screen ?: it.screen,
             )
         }
+        updateNotification()
     }
 }

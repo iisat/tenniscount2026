@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tenniscount.app.ui.MatchViewModel
 import com.tenniscount.app.ui.Screen
+import com.tenniscount.app.ui.history.HistoryScreen
 import com.tenniscount.app.ui.scoreboard.ScoreboardScreen
 import com.tenniscount.app.ui.setup.MatchSetupScreen
 import com.tenniscount.app.ui.theme.TennisCountTheme
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
                     when (state.screen) {
                         Screen.SETUP -> MatchSetupScreen(state, viewModel)
                         Screen.SCOREBOARD -> ScoreboardScreen(state, viewModel)
+                        Screen.HISTORY -> HistoryScreen(viewModel)
                     }
                 }
             }

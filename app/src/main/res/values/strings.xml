@@ -33,4 +33,12 @@
     <string name="edit_set_title">Правка геймов в сете</string>
     <string name="apply">Применить</string>
     <string name="cancel">Отмена</string>
+
+    <string name="history_title">История матчей</string>
+    <string name="history_empty">Завершённых матчей пока нет</string>
+    <string name="back">Назад</string>
+    <string name="delete">Удалить</string>
+
+    <string name="notification_title">Tennis Count слушает счёт</string>
+    <string name="notification_channel_name">Прослушивание матча</string>
 </resources>
