@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+*/build/
+
+# Локальная конфигурация SDK
+local.properties
+
+# Android Studio / IDE
+.idea/
+*.iml
+.cxx/
+.externalNativeBuild/
+
+# Kotlin/Java
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Прочее
+*.log
+.DS_Store
