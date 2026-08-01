@@ -19,6 +19,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -96,6 +97,8 @@ fun ScoreboardScreen(state: MatchUiState, viewModel: MatchViewModel) {
         SetsLine(match)
 
         MicControl(state, viewModel)
+
+        SignalVolumeRow(state, viewModel)
 
         LogView(state.log, modifier = Modifier.heightIn(max = 96.dp).fillMaxWidth())
 
@@ -302,6 +305,28 @@ private fun MicControl(state: MatchUiState, viewModel: MatchViewModel) {
                 viewModel.clearWarning()
             }
         }
+    }
+}
+
+/** Громкость сигналов приложения относительно медиа-громкости (поверх музыки). */
+@Composable
+private fun SignalVolumeRow(state: MatchUiState, viewModel: MatchViewModel) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.signal_volume),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Slider(
+            value = state.signalVolume,
+            onValueChange = viewModel::setSignalVolume,
+            onValueChangeFinished = viewModel::previewSignal,
+            valueRange = 0.1f..1f,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 

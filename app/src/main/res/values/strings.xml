@@ -28,6 +28,7 @@
     <string name="model_downloading">Загрузка модели: %1$d%%</string>
     <string name="mic_error">Ошибка: %1$s</string>
     <string name="heard_prefix">Слышу: %1$s</string>
+    <string name="signal_volume">Громкость сигналов</string>
 
     <string name="edit_game_title">Правка очков в гейме</string>
     <string name="edit_set_title">Правка геймов в сете</string>

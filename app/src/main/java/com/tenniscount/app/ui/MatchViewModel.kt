@@ -2,13 +2,17 @@ package com.tenniscount.app.ui
 
 import android.Manifest
 import android.app.Application
+import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.media.ToneGenerator
+import android.net.Uri
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tenniscount.app.data.FinishedMatchEntity
@@ -34,6 +38,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 enum class Screen { SETUP, SCOREBOARD, HISTORY }
 
@@ -55,6 +60,8 @@ data class MatchUiState(
     val lastHeard: String = "",
     /** Предупреждение о противоречии объявления текущему счёту. */
     val warning: String? = null,
+    /** Относительная громкость сигналов приложения (0.1–1.0 от медиа-громкости). */
+    val signalVolume: Float = 1f,
 ) {
     fun name(player: Player): String = when (player) {
         Player.ONE -> player1Name
@@ -64,7 +71,11 @@ data class MatchUiState(
 
 class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val _uiState = MutableStateFlow(MatchUiState())
+    private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val _uiState = MutableStateFlow(
+        MatchUiState(signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 1f)),
+    )
     val uiState: StateFlow<MatchUiState> = _uiState.asStateFlow()
 
     private var engine: MatchEngine? = null
@@ -76,7 +87,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private val db = MatchDatabase.get(application)
 
     // Медиа-канал: слышен и в беззвучном режиме, громкость регулируется кнопками.
-    private val toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+    private var toneGenerator = createToneGenerator(_uiState.value.signalVolume)
 
     /** Завершённые матчи (история), новые сверху. */
     val history: StateFlow<List<FinishedMatchEntity>> = db.matchDao().observeAll()
@@ -181,6 +192,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             player1Name = s.player1Name,
             player2Name = s.player2Name,
             firstServer = s.firstServer,
+            signalVolume = s.signalVolume,
         )
     }
 
@@ -321,6 +333,22 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         sync()
     }
 
+    /** Регулировка громкости сигналов относительно медиа-громкости (музыка в наушниках). */
+    fun setSignalVolume(volume: Float) {
+        val clamped = volume.coerceIn(0.1f, 1f)
+        _uiState.update { it.copy(signalVolume = clamped) }
+        prefs.edit { putFloat(KEY_SIGNAL_VOLUME, clamped) }
+        // Громкость ToneGenerator задаётся только при создании — пересоздаём.
+        toneGenerator.release()
+        toneGenerator = createToneGenerator(clamped)
+    }
+
+    /** Пробный beep при отпускании слайдера громкости. */
+    fun previewSignal() = beep()
+
+    private fun createToneGenerator(volume: Float) =
+        ToneGenerator(AudioManager.STREAM_MUSIC, (volume * 100).roundToInt().coerceIn(1, 100))
+
     /** Короткий beep — подтверждение, что объявление услышано, не глядя на экран. */
     private fun beep() {
         val ok = runCatching {
@@ -348,18 +376,32 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             repeat(times) { i ->
-                runCatching {
-                    RingtoneManager.getRingtone(getApplication(), uri)?.apply {
-                        // Медиа-канал, иначе звонок подчиняется громкости уведомлений.
-                        audioAttributes = AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .build()
-                        play()
-                    }
-                }.onFailure { Log.w(TAG, "ring: ошибка воспроизведения", it) }
+                playRingtone(uri)
                 if (i < times - 1) delay(400)
             }
         }
+    }
+
+    /**
+     * Звонок через MediaPlayer (у Ringtone нет регулировки громкости).
+     * Медиа-канал + относительная громкость сигналов.
+     */
+    private fun playRingtone(uri: Uri) {
+        runCatching {
+            val volume = _uiState.value.signalVolume
+            MediaPlayer().apply {
+                setDataSource(getApplication(), uri)
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build(),
+                )
+                setVolume(volume, volume)
+                setOnPreparedListener { it.start() }
+                setOnCompletionListener { it.release() }
+                prepareAsync()
+            }
+        }.onFailure { Log.w(TAG, "ring: ошибка воспроизведения", it) }
     }
 
     override fun onCleared() {
@@ -397,5 +439,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val TAG = "MatchViewModel"
+        const val PREFS_NAME = "settings"
+        const val KEY_SIGNAL_VOLUME = "signal_volume"
     }
 }
