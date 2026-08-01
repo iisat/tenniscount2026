@@ -39,6 +39,19 @@ data class GameState(
             else -> null
         }
 
+    /**
+     * Победитель по объявлению «гейм»: игрок с преимуществом, либо лидер,
+     * дошедший до «40» (40:0/40:15/40:30 — последний розыгрыш только что сыгран).
+     * При равном счёте (включая deuce) объявление ошибочно — возвращает null.
+     */
+    val announcedWinner: Player?
+        get() = advantagePlayer
+            ?: if (maxOf(pointsP1, pointsP2) >= 3 && pointsP1 != pointsP2) {
+                if (pointsP1 > pointsP2) Player.ONE else Player.TWO
+            } else {
+                null
+            }
+
     fun points(player: Player): Int = when (player) {
         Player.ONE -> pointsP1
         Player.TWO -> pointsP2

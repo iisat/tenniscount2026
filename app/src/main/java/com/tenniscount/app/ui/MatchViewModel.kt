@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.media.RingtoneManager
 import android.media.ToneGenerator
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -24,6 +25,7 @@ import com.tenniscount.app.speech.ScoreParser
 import com.tenniscount.app.speech.VoiceCommand
 import com.tenniscount.app.speech.VoskRecognizer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -65,6 +67,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MatchUiState> = _uiState.asStateFlow()
 
     private var engine: MatchEngine? = null
+
+    /** Последнее синхронизированное состояние — для звуковых сигналов о гейме/сете. */
+    private var lastSyncedState: MatchState? = null
 
     private val controller = ListeningController.get(application)
     private val db = MatchDatabase.get(application)
@@ -120,6 +125,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startMatch() {
         engine = MatchEngine(_uiState.value.firstServer)
+        lastSyncedState = null
         sync(screen = Screen.SCOREBOARD)
     }
 
@@ -167,6 +173,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         stopListening()
         val s = _uiState.value
         engine = null
+        lastSyncedState = null
         _uiState.value = MatchUiState(
             player1Name = s.player1Name,
             player2Name = s.player2Name,
@@ -274,6 +281,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     is ApplyResult.Rejected -> {
                         Log.d(TAG, "счёт отклонён (${result.reason}): «$rawText»")
+                        nack()
                         currentEngine.logNote(
                             when (result.reason) {
                                 RejectionReason.BACKWARD -> "→ не применено: меньше текущего счёта"
@@ -289,33 +297,46 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-            VoiceCommand.Undo -> if (currentEngine.undo()) beep()
+            VoiceCommand.Undo -> if (currentEngine.undo()) beep() else nack()
 
             VoiceCommand.GameWon -> {
-                currentEngine.winGame(resolveGameWinner(currentEngine.state))
-                beep()
+                val winner = currentEngine.state.currentSet.currentGame.announcedWinner
+                if (winner == null) {
+                    // «Гейм» при равном счёте — ошибочная команда, счёт не меняется.
+                    Log.d(TAG, "«гейм» отклонён: равный счёт")
+                    currentEngine.logNote("→ «гейм» при равном счёте — ошибочная команда")
+                    nack()
+                } else {
+                    currentEngine.winGame(winner)
+                    beep()
+                }
             }
         }
         sync()
     }
 
-    /**
-     * Победитель по объявлению «гейм»: игрок с преимуществом, иначе лидер по очкам,
-     * иначе подающий (счёт объявляет именно он).
-     */
-    private fun resolveGameWinner(state: MatchState): Player {
-        val game = state.currentSet.currentGame
-        return game.advantagePlayer
-            ?: if (game.pointsP1 != game.pointsP2) {
-                if (game.pointsP1 > game.pointsP2) Player.ONE else Player.TWO
-            } else {
-                state.server
-            }
-    }
-
     /** Короткий beep — подтверждение, что объявление услышано, не глядя на экран. */
     private fun beep() {
         runCatching { toneGenerator.startTone(ToneGenerator.TONE_PROP_ACK, 150) }
+    }
+
+    /** Низкий двойной сигнал — команда распознана, но отклонена. */
+    private fun nack() {
+        runCatching { toneGenerator.startTone(ToneGenerator.TONE_PROP_NACK, 200) }
+    }
+
+    /** Звонок при выигранном гейме; тройной — если этим геймом завершён сет. */
+    private fun ring(times: Int) {
+        viewModelScope.launch {
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                ?: return@launch
+            repeat(times) { i ->
+                runCatching {
+                    RingtoneManager.getRingtone(getApplication(), uri)?.play()
+                }
+                if (i < times - 1) delay(900)
+            }
+        }
     }
 
     override fun onCleared() {
@@ -328,6 +349,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun sync(screen: Screen? = null) {
         val e = engine ?: return
+        signalGameTransitions(e.state)
         _uiState.update {
             it.copy(
                 matchState = e.state,
@@ -337,6 +359,17 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         updateNotification()
+    }
+
+    /** Звонок при засчитанном гейме; тройной звонок, если этим геймом завершился сет. */
+    private fun signalGameTransitions(new: MatchState) {
+        val prev = lastSyncedState
+        lastSyncedState = new
+        if (prev == null || prev == new) return
+        when {
+            new.completedSets.size > prev.completedSets.size -> ring(times = 3)
+            new.totalGames > prev.totalGames -> ring(times = 1)
+        }
     }
 
     private companion object {

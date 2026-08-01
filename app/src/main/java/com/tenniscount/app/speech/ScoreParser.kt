@@ -20,9 +20,9 @@ sealed interface VoiceCommand {
 
 /**
  * Парсер распознанного текста в [VoiceCommand]. Чистый Kotlin, без Android-зависимостей.
- * Понимает числа словами и цифрами («пятнадцать-ноль», «15-0», «тридцать пятнадцать»)
- * и термины «ровно», «больше», «отмена», «гейм». Лишние слова игнорируются;
- * фразы без счёта возвращают null.
+ * Понимает числа словами и цифрами («пятнадцать-ноль», «15-0», «тридцать пятнадцать»),
+ * одно число как сокращение «15-0», и термины «ровно», «больше», «меньше»,
+ * «отмена», «гейм». Лишние слова игнорируются; фразы без счёта возвращают null.
  */
 object ScoreParser {
 
@@ -53,8 +53,14 @@ object ScoreParser {
             }
             tokens.contains("ровно") -> VoiceCommand.Score(Announcement.Deuce)
             tokens.contains("больше") -> VoiceCommand.Score(Announcement.Advantage(toServer = true))
+            tokens.contains("меньше") -> VoiceCommand.Score(Announcement.Advantage(toServer = false))
             tokens.any { it == "отмена" || it == "отмени" } -> VoiceCommand.Undo
             tokens.contains("гейм") -> VoiceCommand.GameWon
+            // Одно число — сокращённое объявление «15-0» («пятнадцать», «30», …).
+            numbers.size == 1 -> {
+                val serverPoints = GameState.pointsToCount(numbers[0]) ?: return null
+                VoiceCommand.Score(Announcement.Points(serverPoints, 0))
+            }
             else -> null
         }
     }

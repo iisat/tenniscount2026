@@ -61,6 +61,14 @@ class ScoreParserTest {
     }
 
     @Test
+    fun `меньше даёт advantage принимающему`() {
+        assertEquals(
+            VoiceCommand.Score(Announcement.Advantage(toServer = false)),
+            ScoreParser.parse("меньше"),
+        )
+    }
+
+    @Test
     fun `отмена и отмени дают undo`() {
         assertEquals(VoiceCommand.Undo, ScoreParser.parse("отмена"))
         assertEquals(VoiceCommand.Undo, ScoreParser.parse("отмени"))
@@ -72,8 +80,24 @@ class ScoreParserTest {
     }
 
     @Test
-    fun `одно число без пары не счёт`() {
-        assertNull(ScoreParser.parse("пятнадцать"))
+    fun `одно число — сокращённое объявление с нулём принимающего`() {
+        // Движок часто слышит только первое слово: «15-0» → «пятнадцать».
+        assertEquals(
+            VoiceCommand.Score(Announcement.Points(serverPoints = 1, receiverPoints = 0)),
+            ScoreParser.parse("пятнадцать"),
+        )
+        assertEquals(
+            VoiceCommand.Score(Announcement.Points(serverPoints = 2, receiverPoints = 0)),
+            ScoreParser.parse("тридцать"),
+        )
+        assertEquals(
+            VoiceCommand.Score(Announcement.Points(serverPoints = 3, receiverPoints = 0)),
+            ScoreParser.parse("40"),
+        )
+        assertEquals(
+            VoiceCommand.Score(Announcement.Points(serverPoints = 0, receiverPoints = 0)),
+            ScoreParser.parse("ноль"),
+        )
     }
 
     @Test

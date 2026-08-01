@@ -38,6 +38,24 @@ class GameStateTest {
     }
 
     @Test
+    fun `announcedWinner при deuce и равном счёте — null (ошибочная команда)`() {
+        assertNull(GameState(3, 3).announcedWinner) // 40-40
+        assertNull(GameState(4, 4).announcedWinner) // deuce после advantage
+        assertNull(GameState(2, 2).announcedWinner) // 30-30
+        assertNull(GameState(0, 0).announcedWinner) // 0-0
+        assertNull(GameState(1, 0).announcedWinner) // 15-0: гейм не мог закончиться
+    }
+
+    @Test
+    fun `announcedWinner при преимуществе и 40 против меньшего`() {
+        assertEquals(Player.ONE, GameState(4, 3).announcedWinner) // advantage P1
+        assertEquals(Player.TWO, GameState(3, 4).announcedWinner) // advantage P2
+        assertEquals(Player.ONE, GameState(3, 2).announcedWinner) // 40-30
+        assertEquals(Player.ONE, GameState(3, 1).announcedWinner) // 40-15
+        assertEquals(Player.TWO, GameState(0, 3).announcedWinner) // 0-40
+    }
+
+    @Test
     fun `deuce at 40-40, advantage, back to deuce, win`() {
         var game = GameState(pointsP1 = 3, pointsP2 = 3)
         assertTrue(game.isDeuce)
