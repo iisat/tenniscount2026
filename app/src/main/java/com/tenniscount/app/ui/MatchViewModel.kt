@@ -3,6 +3,7 @@ package com.tenniscount.app.ui
 import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.RingtoneManager
 import android.media.ToneGenerator
@@ -73,7 +74,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private val controller = ListeningController.get(application)
     private val db = MatchDatabase.get(application)
-    private val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+
+    // Медиа-канал: слышен и в беззвучном режиме, громкость регулируется кнопками.
+    private val toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
 
     /** Завершённые матчи (история), новые сверху. */
     val history: StateFlow<List<FinishedMatchEntity>> = db.matchDao().observeAll()
@@ -302,9 +305,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             VoiceCommand.GameWon -> {
                 val winner = currentEngine.state.currentSet.currentGame.announcedWinner
                 if (winner == null) {
-                    // «Гейм» при равном счёте — ошибочная команда, счёт не меняется.
-                    Log.d(TAG, "«гейм» отклонён: равный счёт")
-                    currentEngine.logNote("→ «гейм» при равном счёте — ошибочная команда")
+                    // При таком счёте гейм не мог закончиться — ошибочная команда.
+                    Log.d(TAG, "«гейм» отклонён: гейм не мог завершиться при текущем счёте")
+                    currentEngine.logNote("→ «гейм» не мог завершиться при текущем счёте — ошибочная команда")
                     nack()
                 } else {
                     currentEngine.winGame(winner)
@@ -317,24 +320,41 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Короткий beep — подтверждение, что объявление услышано, не глядя на экран. */
     private fun beep() {
-        runCatching { toneGenerator.startTone(ToneGenerator.TONE_PROP_ACK, 150) }
+        val ok = runCatching {
+            toneGenerator.startTone(ToneGenerator.TONE_PROP_ACK, 150)
+        }.getOrDefault(false)
+        Log.d(TAG, "beep: startTone=$ok")
     }
 
     /** Низкий двойной сигнал — команда распознана, но отклонена. */
     private fun nack() {
-        runCatching { toneGenerator.startTone(ToneGenerator.TONE_PROP_NACK, 200) }
+        val ok = runCatching {
+            toneGenerator.startTone(ToneGenerator.TONE_PROP_NACK, 200)
+        }.getOrDefault(false)
+        Log.d(TAG, "nack: startTone=$ok")
     }
 
     /** Звонок при выигранном гейме; тройной — если этим геймом завершён сет. */
     private fun ring(times: Int) {
         viewModelScope.launch {
             val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                ?: return@launch
+            Log.d(TAG, "ring: times=$times, uri=$uri")
+            if (uri == null) {
+                // Нет системного рингтона уведомлений — серия beep'ов вместо звонка.
+                repeat(times * 2) { beep(); delay(300) }
+                return@launch
+            }
             repeat(times) { i ->
                 runCatching {
-                    RingtoneManager.getRingtone(getApplication(), uri)?.play()
-                }
-                if (i < times - 1) delay(900)
+                    RingtoneManager.getRingtone(getApplication(), uri)?.apply {
+                        // Медиа-канал, иначе звонок подчиняется громкости уведомлений.
+                        audioAttributes = AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .build()
+                        play()
+                    }
+                }.onFailure { Log.w(TAG, "ring: ошибка воспроизведения", it) }
+                if (i < times - 1) delay(1_200)
             }
         }
     }
