@@ -280,6 +280,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val s = _uiState.value
         if (s.paused || s.finished) return
         val currentEngine = engine ?: return
+        val prev = currentEngine.state
 
         currentEngine.logNote("Распознано: «$rawText»")
         when (command) {
@@ -287,7 +288,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 when (val result = currentEngine.applyAnnouncement(command.announcement)) {
                     ApplyResult.Applied -> {
                         Log.d(TAG, "счёт применён: «$rawText»")
-                        beep()
+                        confirmApplied(prev)
                     }
                     is ApplyResult.Rejected -> {
                         Log.d(TAG, "счёт отклонён (${result.reason}): «$rawText»")
@@ -321,11 +322,21 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                     nack()
                 } else {
                     currentEngine.winGame(winner)
-                    beep()
+                    confirmApplied(prev)
                 }
             }
         }
         sync()
+    }
+
+    /**
+     * Подтверждение применённой команды. Если команда завершила гейм/сет —
+     * beep не звучит: вместо него из sync() зазвонит звонок гейма/сета.
+     */
+    private fun confirmApplied(prev: MatchState) {
+        val new = engine?.state
+        if (new == null || new.totalGames > prev.totalGames) return
+        beep()
     }
 
     /** Регулировка громкости сигналов относительно медиа-громкости (музыка в наушниках). */
