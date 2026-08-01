@@ -25,7 +25,10 @@ enum class RejectionReason {
     /** Недопустимые значения. */
     INVALID,
 
-    /** Объявленный счёт недостижим из текущего за один розыгрыш (перескок). */
+    /**
+     * Объявление недостижимо из текущего состояния за один розыгрыш:
+     * перескок очков либо прямая смена преимущества («меньше» после «больше»).
+     */
     SKIP,
 }
 
@@ -120,8 +123,13 @@ class MatchEngine(firstServer: Player) {
 
             is Announcement.Advantage -> {
                 val advPlayer = if (announcement.toServer) server else server.opponent
-                if (game.advantagePlayer == advPlayer) {
-                    return ApplyResult.Rejected(RejectionReason.DUPLICATE)
+                when {
+                    game.advantagePlayer == advPlayer ->
+                        return ApplyResult.Rejected(RejectionReason.DUPLICATE)
+                    // Прямая смена преимущества невозможна: после «больше»/«меньше»
+                    // может быть только «ровно» (соперник сравнял) или «гейм».
+                    game.advantagePlayer != null ->
+                        return ApplyResult.Rejected(RejectionReason.SKIP)
                 }
                 val base = maxOf(3, game.pointsP1, game.pointsP2)
                 val announced = when (advPlayer) {

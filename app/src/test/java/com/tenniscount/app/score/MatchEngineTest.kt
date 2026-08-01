@@ -131,6 +131,32 @@ class MatchEngineTest {
     }
 
     @Test
+    fun `advantage cannot switch directly to the other player`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.editGameScore(3, 3) // ровно
+        assertEquals(
+            ApplyResult.Applied,
+            engine.applyAnnouncement(Announcement.Advantage(toServer = true)), // «больше»
+        )
+        val before = engine.state
+
+        // «меньше» сразу после «больше» недопустимо: только «ровно» или «гейм».
+        assertEquals(
+            ApplyResult.Rejected(RejectionReason.SKIP),
+            engine.applyAnnouncement(Announcement.Advantage(toServer = false)),
+        )
+        assertEquals(before, engine.state)
+
+        // «ровно» — можно, и после него преимущество вправе взять другой игрок.
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Deuce))
+        assertEquals(
+            ApplyResult.Applied,
+            engine.applyAnnouncement(Announcement.Advantage(toServer = false)),
+        )
+        assertEquals(Player.TWO, engine.state.currentSet.currentGame.advantagePlayer)
+    }
+
+    @Test
     fun `undo restores previous state including server`() {
         val engine = MatchEngine(firstServer = Player.ONE)
         engine.playGame(Player.ONE)

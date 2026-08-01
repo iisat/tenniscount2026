@@ -35,7 +35,8 @@ object SignalPlayer {
     private fun play(segments: List<Pair<Int, Int>>, volume: Float) {
         scope.launch {
             runCatching {
-                val samples = synthesize(segments, volume)
+                // Тишина в начале: аппаратный микшер срезает первые миллисекунды тона.
+                val samples = synthesize(listOf(0 to 25) + segments, volume)
                 val track = AudioTrack.Builder()
                     .setAudioAttributes(
                         AudioAttributes.Builder()
@@ -67,8 +68,8 @@ object SignalPlayer {
         for ((frequency, durationMs) in segments) {
             val count = durationMs * SAMPLE_RATE / 1000
             for (i in 0 until count) {
-                // Затухание в конце сегмента, чтобы не было щелчка.
-                val envelope = if (i > count - 100) (count - i) / 100.0 else 1.0
+                // Плавные края сегмента, чтобы не было щелчков.
+                val envelope = minOf(i, count - i).coerceAtMost(100) / 100.0
                 val wave = if (frequency > 0) {
                     sin(2.0 * PI * frequency * i / SAMPLE_RATE)
                 } else {
