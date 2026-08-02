@@ -44,4 +44,41 @@ class ScoreSpeechTest {
         assertEquals("больше, Игрок 1", ScoreSpeech.gameScore(state(4, 3), names))
         assertEquals("больше, Игрок 2", ScoreSpeech.gameScore(state(3, 4), names))
     }
+
+    private fun gamesState(gamesP1: Int, gamesP2: Int) = MatchState(
+        firstServer = Player.ONE,
+        currentSet = SetState(gamesP1, gamesP2),
+    )
+
+    @Test
+    fun `конец гейма — геймы победителя первыми`() {
+        assertEquals("Гейм, Игрок 1. 3 2", ScoreSpeech.gameEnd(gamesState(3, 2), Player.ONE, names))
+        assertEquals("Гейм, Игрок 2. 5 4", ScoreSpeech.gameEnd(gamesState(4, 5), Player.TWO, names))
+    }
+
+    @Test
+    fun `итог сета — геймы победителя первыми`() {
+        assertEquals("Сет, Игрок 1. 6 4", ScoreSpeech.setEnd(SetScore(6, 4), names))
+        assertEquals("Сет, Игрок 2. 7 5", ScoreSpeech.setEnd(SetScore(5, 7), names))
+    }
+
+    @Test
+    fun `сет-поинт при 5-4 и 6-5`() {
+        assertEquals(Player.ONE, ScoreSpeech.setPointPlayer(gamesState(5, 4)))
+        assertEquals(Player.ONE, ScoreSpeech.setPointPlayer(gamesState(6, 5)))
+        assertEquals(Player.TWO, ScoreSpeech.setPointPlayer(gamesState(3, 5)))
+    }
+
+    @Test
+    fun `нет сет-поинта при равном или недостаточном счёте`() {
+        assertEquals(null, ScoreSpeech.setPointPlayer(gamesState(0, 0)))
+        assertEquals(null, ScoreSpeech.setPointPlayer(gamesState(4, 4)))
+        // При 5-5 выигрыш гейма даёт 6-5 — сет не завершается.
+        assertEquals(null, ScoreSpeech.setPointPlayer(gamesState(5, 5)))
+    }
+
+    @Test
+    fun `фраза сет-поинта с именем игрока`() {
+        assertEquals("Сет-поинт, Игрок 2", ScoreSpeech.setPoint(Player.TWO, names))
+    }
 }

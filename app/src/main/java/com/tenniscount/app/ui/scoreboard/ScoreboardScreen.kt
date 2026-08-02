@@ -20,6 +20,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,6 +65,7 @@ fun ScoreboardScreen(state: MatchUiState, viewModel: MatchViewModel) {
 
     var showGameEdit by remember { mutableStateOf(false) }
     var showSetEdit by remember { mutableStateOf(false) }
+    var showSpeechSettings by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -99,7 +101,7 @@ fun ScoreboardScreen(state: MatchUiState, viewModel: MatchViewModel) {
 
         MicControl(state, viewModel)
 
-        SignalVolumeRow(state, viewModel)
+        SignalVolumeRow(state, viewModel, onSpeechSettings = { showSpeechSettings = true })
 
         LogView(state.log, modifier = Modifier.heightIn(max = 96.dp).fillMaxWidth())
 
@@ -167,6 +169,9 @@ fun ScoreboardScreen(state: MatchUiState, viewModel: MatchViewModel) {
                 showSetEdit = false
             },
         )
+    }
+    if (showSpeechSettings) {
+        SpeechSettingsDialog(state, viewModel, onDismiss = { showSpeechSettings = false })
     }
 }
 
@@ -311,7 +316,11 @@ private fun MicControl(state: MatchUiState, viewModel: MatchViewModel) {
 
 /** Громкость сигналов приложения относительно медиа-громкости (поверх музыки). */
 @Composable
-private fun SignalVolumeRow(state: MatchUiState, viewModel: MatchViewModel) {
+private fun SignalVolumeRow(
+    state: MatchUiState,
+    viewModel: MatchViewModel,
+    onSpeechSettings: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -332,6 +341,65 @@ private fun SignalVolumeRow(state: MatchUiState, viewModel: MatchViewModel) {
             text = "${(state.signalVolume * 100).roundToInt()}%",
             style = MaterialTheme.typography.bodyMedium,
         )
+        TextButton(onClick = onSpeechSettings) {
+            Text(stringResource(R.string.speech_settings))
+        }
+    }
+}
+
+/** Настройки авто-озвучки: счёт в конце гейма, сет-поинт, итог сета. */
+@Composable
+private fun SpeechSettingsDialog(
+    state: MatchUiState,
+    viewModel: MatchViewModel,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.speech_settings)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SpeechToggle(
+                    label = stringResource(R.string.speak_game_end),
+                    checked = state.speakGameEnd,
+                    onCheckedChange = viewModel::setSpeakGameEnd,
+                )
+                SpeechToggle(
+                    label = stringResource(R.string.speak_set_point),
+                    checked = state.speakSetPoint,
+                    onCheckedChange = viewModel::setSpeakSetPoint,
+                )
+                SpeechToggle(
+                    label = stringResource(R.string.speak_set_end),
+                    checked = state.speakSetEnd,
+                    onCheckedChange = viewModel::setSpeakSetEnd,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        },
+    )
+}
+
+@Composable
+private fun SpeechToggle(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

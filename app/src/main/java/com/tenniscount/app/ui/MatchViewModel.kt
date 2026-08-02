@@ -62,6 +62,12 @@ data class MatchUiState(
     val warning: String? = null,
     /** Относительная громкость сигналов приложения (50–150% от медиа-громкости). */
     val signalVolume: Float = 1f,
+    /** Озвучивать счёт по геймам в конце гейма. */
+    val speakGameEnd: Boolean = true,
+    /** Озвучивать «сет-поинт», когда игрок может выиграть сет в текущем гейме. */
+    val speakSetPoint: Boolean = true,
+    /** Озвучивать итоговый счёт по геймам после окончания сета. */
+    val speakSetEnd: Boolean = true,
 ) {
     fun name(player: Player): String = when (player) {
         Player.ONE -> player1Name
@@ -75,7 +81,12 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(
         // coerceIn: в старой версии диапазон был 0.1–1.0 — значение могло остаться ниже 0.5.
-        MatchUiState(signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 1f).coerceIn(0.5f, 1.5f)),
+        MatchUiState(
+            signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 1f).coerceIn(0.5f, 1.5f),
+            speakGameEnd = prefs.getBoolean(KEY_SPEAK_GAME_END, true),
+            speakSetPoint = prefs.getBoolean(KEY_SPEAK_SET_POINT, true),
+            speakSetEnd = prefs.getBoolean(KEY_SPEAK_SET_END, true),
+        ),
     )
     val uiState: StateFlow<MatchUiState> = _uiState.asStateFlow()
 
@@ -208,6 +219,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             player2Name = s.player2Name,
             firstServer = s.firstServer,
             signalVolume = s.signalVolume,
+            speakGameEnd = s.speakGameEnd,
+            speakSetPoint = s.speakSetPoint,
+            speakSetEnd = s.speakSetEnd,
         )
     }
 
@@ -377,8 +391,30 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     /** Пробный beep при отпускании слайдера громкости. */
     fun previewSignal() = beep()
 
-    private fun speak(text: String) {
-        runCatching { tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "score") }
+    // --- Настройки озвучки ---
+
+    fun setSpeakGameEnd(enabled: Boolean) {
+        _uiState.update { it.copy(speakGameEnd = enabled) }
+        prefs.edit { putBoolean(KEY_SPEAK_GAME_END, enabled) }
+    }
+
+    fun setSpeakSetPoint(enabled: Boolean) {
+        _uiState.update { it.copy(speakSetPoint = enabled) }
+        prefs.edit { putBoolean(KEY_SPEAK_SET_POINT, enabled) }
+    }
+
+    fun setSpeakSetEnd(enabled: Boolean) {
+        _uiState.update { it.copy(speakSetEnd = enabled) }
+        prefs.edit { putBoolean(KEY_SPEAK_SET_END, enabled) }
+    }
+
+    /**
+     * Озвучка через on-device TTS. [enqueue] = true — фраза встаёт в очередь
+     * следом за уже звучащей (например, «сет-поинт» после счёта гейма).
+     */
+    private fun speak(text: String, enqueue: Boolean = false) {
+        val mode = if (enqueue) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
+        runCatching { tts?.speak(text, mode, null, "score") }
             .onFailure { Log.w(TAG, "tts: ошибка озвучки", it) }
     }
 
@@ -456,14 +492,43 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         updateNotification()
     }
 
-    /** Звонок при засчитанном гейме; тройной звонок, если этим геймом завершился сет. */
+    /**
+     * Звонок и озвучка при засчитанном гейме: тройной звонок и итог по геймам,
+     * если этим геймом завершился сет; «сет-поинт», когда игрок может
+     * выиграть сет в только что начавшемся гейме.
+     */
     private fun signalGameTransitions(new: MatchState) {
         val prev = lastSyncedState
         lastSyncedState = new
         if (prev == null || prev == new) return
+        val s = _uiState.value
+        var speaking = false
         when {
-            new.completedSets.size > prev.completedSets.size -> ring(times = 3)
-            new.totalGames > prev.totalGames -> ring(times = 1)
+            new.completedSets.size > prev.completedSets.size -> {
+                ring(times = 3)
+                if (s.speakSetEnd) {
+                    speak(ScoreSpeech.setEnd(new.completedSets.last(), s::name))
+                    speaking = true
+                }
+            }
+            new.totalGames > prev.totalGames -> {
+                ring(times = 1)
+                if (s.speakGameEnd) {
+                    val winner =
+                        if (new.currentSet.gamesP1 > prev.currentSet.gamesP1) Player.ONE else Player.TWO
+                    speak(ScoreSpeech.gameEnd(new, winner, s::name))
+                    speaking = true
+                }
+            }
+        }
+        // Сет-поинт объявляем при смене ситуации (игрок или его счёт), чтобы
+        // не повторяться на каждом очке и объявить заново после 5-5 → 6-5.
+        if (s.speakSetPoint) {
+            val now = ScoreSpeech.setPointPlayer(new)?.let { it to new.currentSet.games(it) }
+            val before = ScoreSpeech.setPointPlayer(prev)?.let { it to prev.currentSet.games(it) }
+            if (now != null && now != before) {
+                speak(ScoreSpeech.setPoint(now.first, s::name), enqueue = speaking)
+            }
         }
     }
 
@@ -471,5 +536,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         const val TAG = "MatchViewModel"
         const val PREFS_NAME = "settings"
         const val KEY_SIGNAL_VOLUME = "signal_volume"
+        const val KEY_SPEAK_GAME_END = "speak_game_end"
+        const val KEY_SPEAK_SET_POINT = "speak_set_point"
+        const val KEY_SPEAK_SET_END = "speak_set_end"
     }
 }

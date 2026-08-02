@@ -29,6 +29,11 @@
     <string name="mic_error">Ошибка: %1$s</string>
     <string name="heard_prefix">Слышу: %1$s</string>
     <string name="signal_volume">Громкость сигналов</string>
+    <string name="speech_settings">Озвучка</string>
+    <string name="speak_game_end">Счёт в конце гейма</string>
+    <string name="speak_set_point">Сет-поинт</string>
+    <string name="speak_set_end">Итог сета по геймам</string>
+    <string name="close">Закрыть</string>
 
     <string name="edit_game_title">Правка очков в гейме</string>
     <string name="edit_set_title">Правка геймов в сете</string>
