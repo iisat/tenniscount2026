@@ -80,9 +80,8 @@ class ScoreParserTest {
     }
 
     @Test
-    fun `счёт даёт команду озвучки счёта`() {
-        assertEquals(VoiceCommand.ScoreQuery, ScoreParser.parse("счет"))
-        assertEquals(VoiceCommand.ScoreQuery, ScoreParser.parse("счёт"))
+    fun `сколько даёт команду озвучки счёта`() {
+        assertEquals(VoiceCommand.ScoreQuery, ScoreParser.parse("сколько"))
     }
 
     @Test

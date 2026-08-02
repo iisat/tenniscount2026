@@ -17,7 +17,7 @@ sealed interface VoiceCommand {
     /** «Гейм» — засчитать гейм; победитель определяется по текущему состоянию. */
     data object GameWon : VoiceCommand
 
-    /** «Счёт» — озвучить текущий счёт в гейме. */
+    /** «Сколько» — озвучить текущий счёт в гейме. */
     data object ScoreQuery : VoiceCommand
 }
 
@@ -59,7 +59,7 @@ object ScoreParser {
             tokens.contains("меньше") -> VoiceCommand.Score(Announcement.Advantage(toServer = false))
             tokens.any { it == "отмена" || it == "отмени" } -> VoiceCommand.Undo
             tokens.contains("гейм") -> VoiceCommand.GameWon
-            tokens.any { it == "счет" || it == "счёт" } -> VoiceCommand.ScoreQuery
+            tokens.contains("сколько") -> VoiceCommand.ScoreQuery
             // Одно число — сокращённое объявление «15-0» («пятнадцать», «30», …).
             numbers.size == 1 -> {
                 val serverPoints = GameState.pointsToCount(numbers[0]) ?: return null
