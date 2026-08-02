@@ -80,6 +80,12 @@ class ScoreParserTest {
     }
 
     @Test
+    fun `счёт даёт команду озвучки счёта`() {
+        assertEquals(VoiceCommand.ScoreQuery, ScoreParser.parse("счет"))
+        assertEquals(VoiceCommand.ScoreQuery, ScoreParser.parse("счёт"))
+    }
+
+    @Test
     fun `одно число — сокращённое объявление с нулём принимающего`() {
         // Движок часто слышит только первое слово: «15-0» → «пятнадцать».
         assertEquals(

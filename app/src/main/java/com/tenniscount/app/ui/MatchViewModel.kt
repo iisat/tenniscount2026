@@ -8,6 +8,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -21,6 +22,7 @@ import com.tenniscount.app.score.MatchState
 import com.tenniscount.app.score.MatchSummary
 import com.tenniscount.app.score.Player
 import com.tenniscount.app.score.RejectionReason
+import com.tenniscount.app.score.ScoreSpeech
 import com.tenniscount.app.service.ListeningController
 import com.tenniscount.app.service.ListeningService
 import com.tenniscount.app.service.MicState
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 enum class Screen { SETUP, SCOREBOARD, HISTORY }
 
@@ -84,6 +87,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private val controller = ListeningController.get(application)
     private val db = MatchDatabase.get(application)
 
+    /** Озвучка счёта по команде «счёт» (on-device TTS, русский). */
+    private var tts: TextToSpeech? = null
+
     /** Завершённые матчи (история), новые сверху. */
     val history: StateFlow<List<FinishedMatchEntity>> = db.matchDao().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -108,6 +114,20 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        runCatching {
+            TextToSpeech(getApplication()) { status ->
+                if (status != TextToSpeech.SUCCESS) return@TextToSpeech
+                tts?.let { t ->
+                    t.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .build(),
+                    )
+                    Log.d(TAG, "tts: setLanguage(ru)=${t.setLanguage(Locale("ru"))}")
+                }
+            }.also { tts = it }
+        }.onFailure { Log.w(TAG, "tts: недоступен", it) }
+
         controller.listener = recognitionListener
         // Действия из уведомления foreground-сервиса (экран выключен).
         controller.onPauseToggleRequested = { togglePause() }
@@ -313,6 +333,14 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
             VoiceCommand.Undo -> if (currentEngine.undo()) beep() else nack()
 
+            VoiceCommand.ScoreQuery -> {
+                // Проговариваем записанный счёт гейма; сама речь — и есть подтверждение.
+                val text = ScoreSpeech.gameScore(currentEngine.state, s::name)
+                Log.d(TAG, "счёт озвучен: $text")
+                currentEngine.logNote("→ озвучено: $text")
+                speak(text)
+            }
+
             VoiceCommand.GameWon -> {
                 val winner = currentEngine.state.currentSet.currentGame.announcedWinner
                 if (winner == null) {
@@ -348,6 +376,11 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Пробный beep при отпускании слайдера громкости. */
     fun previewSignal() = beep()
+
+    private fun speak(text: String) {
+        runCatching { tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "score") }
+            .onFailure { Log.w(TAG, "tts: ошибка озвучки", it) }
+    }
 
     /** Короткий beep — подтверждение, что объявление услышано, не глядя на экран. */
     private fun beep() {
@@ -405,6 +438,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         controller.listener = null
         controller.onPauseToggleRequested = null
         controller.onStopRequested = null
+        tts?.shutdown()
+        tts = null
     }
 
     private fun sync(screen: Screen? = null) {
