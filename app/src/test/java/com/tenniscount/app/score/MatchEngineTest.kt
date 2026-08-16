@@ -157,6 +157,56 @@ class MatchEngineTest {
     }
 
     @Test
+    fun `validation disabled applies any announcement`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.strictValidation = false
+        engine.editGameScore(2, 1) // 30-15
+
+        // Назад — применяется.
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(1, 0)))
+        assertEquals(1, engine.state.currentSet.currentGame.pointsP1)
+
+        // Дубликат — применяется.
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(1, 0)))
+
+        // Перескок — применяется.
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Points(3, 2)))
+        assertEquals(GameState(3, 2), engine.state.currentSet.currentGame)
+    }
+
+    @Test
+    fun `validation disabled still rejects invalid values`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.strictValidation = false
+        assertEquals(
+            ApplyResult.Rejected(RejectionReason.INVALID),
+            engine.applyAnnouncement(Announcement.Points(5, 0)),
+        )
+    }
+
+    @Test
+    fun `validation disabled allows duplicate deuce and direct advantage switch`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.strictValidation = false
+
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Deuce))
+        // Повторное «ровно» — применяется.
+        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Deuce))
+        assertTrue(engine.state.currentSet.currentGame.isDeuce)
+
+        assertEquals(
+            ApplyResult.Applied,
+            engine.applyAnnouncement(Announcement.Advantage(toServer = true)),
+        )
+        // Прямая смена преимущества «больше» -> «меньше» — применяется.
+        assertEquals(
+            ApplyResult.Applied,
+            engine.applyAnnouncement(Announcement.Advantage(toServer = false)),
+        )
+        assertEquals(Player.TWO, engine.state.currentSet.currentGame.advantagePlayer)
+    }
+
+    @Test
     fun `undo restores previous state including server`() {
         val engine = MatchEngine(firstServer = Player.ONE)
         engine.playGame(Player.ONE)

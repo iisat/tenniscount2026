@@ -68,6 +68,8 @@ data class MatchUiState(
     val speakSetPoint: Boolean = true,
     /** Озвучивать итоговый счёт по геймам после окончания сета. */
     val speakSetEnd: Boolean = true,
+    /** Проверять объявленный счёт на противоречия текущему (иначе применять любой). */
+    val strictValidation: Boolean = true,
 ) {
     fun name(player: Player): String = when (player) {
         Player.ONE -> player1Name
@@ -86,6 +88,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             speakGameEnd = prefs.getBoolean(KEY_SPEAK_GAME_END, true),
             speakSetPoint = prefs.getBoolean(KEY_SPEAK_SET_POINT, true),
             speakSetEnd = prefs.getBoolean(KEY_SPEAK_SET_END, true),
+            strictValidation = prefs.getBoolean(KEY_STRICT_VALIDATION, true),
         ),
     )
     val uiState: StateFlow<MatchUiState> = _uiState.asStateFlow()
@@ -165,6 +168,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startMatch() {
         engine = MatchEngine(_uiState.value.firstServer)
+            .also { it.strictValidation = _uiState.value.strictValidation }
         lastSyncedState = null
         sync(screen = Screen.SCOREBOARD)
     }
@@ -222,6 +226,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             speakGameEnd = s.speakGameEnd,
             speakSetPoint = s.speakSetPoint,
             speakSetEnd = s.speakSetEnd,
+            strictValidation = s.strictValidation,
         )
     }
 
@@ -357,14 +362,24 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
             VoiceCommand.GameWon -> {
                 val winner = currentEngine.state.currentSet.currentGame.announcedWinner
-                if (winner == null) {
-                    // При таком счёте гейм не мог закончиться — ошибочная команда.
-                    Log.d(TAG, "«гейм» отклонён: гейм не мог завершиться при текущем счёте")
-                    currentEngine.logNote("→ «гейм» не мог завершиться при текущем счёте — ошибочная команда")
-                    nack()
-                } else {
-                    currentEngine.winGame(winner)
-                    confirmApplied(prev)
+                when {
+                    winner != null -> {
+                        currentEngine.winGame(winner)
+                        confirmApplied(prev)
+                    }
+                    !s.strictValidation -> {
+                        // Валидация отключена, но победитель гейма не определяется —
+                        // не засчитываем, а спрашиваем счёт голосом.
+                        Log.d(TAG, "«гейм»: победитель не определён, запрошен счёт")
+                        currentEngine.logNote("→ «гейм»: непонятно, в чью пользу — запрошен счёт")
+                        speak("Счёт?")
+                    }
+                    else -> {
+                        // При таком счёте гейм не мог закончиться — ошибочная команда.
+                        Log.d(TAG, "«гейм» отклонён: гейм не мог завершиться при текущем счёте")
+                        currentEngine.logNote("→ «гейм» не мог завершиться при текущем счёте — ошибочная команда")
+                        nack()
+                    }
                 }
             }
         }
@@ -406,6 +421,13 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     fun setSpeakSetEnd(enabled: Boolean) {
         _uiState.update { it.copy(speakSetEnd = enabled) }
         prefs.edit { putBoolean(KEY_SPEAK_SET_END, enabled) }
+    }
+
+    /** Строгая проверка объявлений; действует и на уже идущий матч. */
+    fun setStrictValidation(enabled: Boolean) {
+        _uiState.update { it.copy(strictValidation = enabled) }
+        prefs.edit { putBoolean(KEY_STRICT_VALIDATION, enabled) }
+        engine?.strictValidation = enabled
     }
 
     /**
@@ -539,5 +561,6 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_SPEAK_GAME_END = "speak_game_end"
         const val KEY_SPEAK_SET_POINT = "speak_set_point"
         const val KEY_SPEAK_SET_END = "speak_set_end"
+        const val KEY_STRICT_VALIDATION = "strict_validation"
     }
 }

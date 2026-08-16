@@ -347,7 +347,7 @@ private fun SignalVolumeRow(
     }
 }
 
-/** Настройки авто-озвучки: счёт в конце гейма, сет-поинт, итог сета. */
+/** Голосовые настройки: авто-озвучка и проверка корректности счёта. */
 @Composable
 private fun SpeechSettingsDialog(
     state: MatchUiState,
@@ -373,6 +373,11 @@ private fun SpeechSettingsDialog(
                     label = stringResource(R.string.speak_set_end),
                     checked = state.speakSetEnd,
                     onCheckedChange = viewModel::setSpeakSetEnd,
+                )
+                SpeechToggle(
+                    label = stringResource(R.string.strict_validation),
+                    checked = state.strictValidation,
+                    onCheckedChange = viewModel::setStrictValidation,
                 )
             }
         },

@@ -43,6 +43,12 @@ sealed interface ApplyResult {
  */
 class MatchEngine(firstServer: Player) {
 
+    /**
+     * Строгая проверка объявлений: противоречия текущему счёту отклоняются.
+     * Если false — любое объявление применяется как есть (кроме недопустимых значений).
+     */
+    var strictValidation = true
+
     var state: MatchState = MatchState(firstServer = firstServer)
         private set
 
@@ -98,11 +104,13 @@ class MatchEngine(firstServer: Player) {
                 val announced = GameState(p1, p2)
                 val gained = (p1 - game.pointsP1) + (p2 - game.pointsP2)
                 when {
-                    announced == game -> ApplyResult.Rejected(RejectionReason.DUPLICATE)
-                    p1 < game.pointsP1 || p2 < game.pointsP2 ->
+                    strictValidation && announced == game ->
+                        ApplyResult.Rejected(RejectionReason.DUPLICATE)
+                    strictValidation && (p1 < game.pointsP1 || p2 < game.pointsP2) ->
                         ApplyResult.Rejected(RejectionReason.BACKWARD)
                     // За один розыгрыш разыгрывается одно очко: перескок невозможен.
-                    gained > 1 -> ApplyResult.Rejected(RejectionReason.SKIP)
+                    strictValidation && gained > 1 ->
+                        ApplyResult.Rejected(RejectionReason.SKIP)
                     else -> {
                         mutate(
                             state.withCurrentGame(announced),
@@ -114,7 +122,9 @@ class MatchEngine(firstServer: Player) {
             }
 
             Announcement.Deuce -> {
-                if (game.isDeuce) return ApplyResult.Rejected(RejectionReason.DUPLICATE)
+                if (strictValidation && game.isDeuce) {
+                    return ApplyResult.Rejected(RejectionReason.DUPLICATE)
+                }
                 // «Ровно» допустимо и из advantage (соперник сравнял): выравниваем счёт.
                 val base = maxOf(3, game.pointsP1, game.pointsP2)
                 mutate(state.withCurrentGame(GameState(base, base)), "Объявлено: ровно")
@@ -123,7 +133,7 @@ class MatchEngine(firstServer: Player) {
 
             is Announcement.Advantage -> {
                 val advPlayer = if (announcement.toServer) server else server.opponent
-                when {
+                if (strictValidation) when {
                     game.advantagePlayer == advPlayer ->
                         return ApplyResult.Rejected(RejectionReason.DUPLICATE)
                     // Прямая смена преимущества невозможна: после «больше»/«меньше»
