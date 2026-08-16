@@ -334,7 +334,7 @@ private fun SignalVolumeRow(
             value = state.signalVolume,
             onValueChange = viewModel::setSignalVolume,
             onValueChangeFinished = viewModel::previewSignal,
-            valueRange = 0.5f..1.5f,
+            valueRange = 1.5f..2.5f,
             modifier = Modifier.weight(1f),
         )
         Text(

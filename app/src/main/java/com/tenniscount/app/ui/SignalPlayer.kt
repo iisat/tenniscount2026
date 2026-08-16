@@ -4,7 +4,10 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.sign
 import kotlin.math.sin
+import kotlin.math.tanh
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,13 +17,13 @@ import kotlinx.coroutines.launch
 /**
  * Короткие сигналы подтверждения/отказа. Тоны синтезируются (синус, PCM)
  * и играются через AudioTrack на медиа-канале — в отличие от ToneGenerator,
- * громкость не ограничена 100% (усиление до 150% для игры поверх музыки).
+ * громкость не ограничена 100% (усиление до 250% для игры поверх музыки).
  */
 object SignalPlayer {
 
     private const val SAMPLE_RATE = 44100
 
-    /** Базовая амплитуда: при громкости 150% ещё нет клиппинга (0.6 * 1.5 = 0.9). */
+    /** Базовая амплитуда: при громкости 150% ещё нет насыщения (0.6 * 1.5 = 0.9). */
     private const val BASE_AMPLITUDE = 0.6
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -75,7 +78,7 @@ object SignalPlayer {
                 } else {
                     0.0
                 }
-                val value = wave * BASE_AMPLITUDE * volume * envelope
+                val value = softClip(wave * BASE_AMPLITUDE * volume) * envelope
                 out[offset + i] = (value * Short.MAX_VALUE).toInt()
                     .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
             }
@@ -83,4 +86,8 @@ object SignalPlayer {
         }
         return out
     }
+
+    /** Мягкий лимитер: до 0.9 без изменений, выше — плавное насыщение вместо цифрового клиппинга. */
+    private fun softClip(x: Double): Double =
+        if (abs(x) <= 0.9) x else sign(x) * (0.9 + 0.1 * tanh((abs(x) - 0.9) / 0.1))
 }

@@ -60,8 +60,8 @@ data class MatchUiState(
     val lastHeard: String = "",
     /** Предупреждение о противоречии объявления текущему счёту. */
     val warning: String? = null,
-    /** Относительная громкость сигналов приложения (50–150% от медиа-громкости). */
-    val signalVolume: Float = 1f,
+    /** Относительная громкость сигналов приложения (150–250% от медиа-громкости). */
+    val signalVolume: Float = 2f,
     /** Озвучивать счёт по геймам в конце гейма. */
     val speakGameEnd: Boolean = true,
     /** Озвучивать «сет-поинт», когда игрок может выиграть сет в текущем гейме. */
@@ -82,9 +82,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private val _uiState = MutableStateFlow(
-        // coerceIn: в старой версии диапазон был 0.1–1.0 — значение могло остаться ниже 0.5.
+        // coerceIn: в старых версиях диапазон был ниже — значение подтягивается к минимуму 1.5.
         MatchUiState(
-            signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 1f).coerceIn(0.5f, 1.5f),
+            signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 2f).coerceIn(1.5f, 2.5f),
             speakGameEnd = prefs.getBoolean(KEY_SPEAK_GAME_END, true),
             speakSetPoint = prefs.getBoolean(KEY_SPEAK_SET_POINT, true),
             speakSetEnd = prefs.getBoolean(KEY_SPEAK_SET_END, true),
@@ -398,7 +398,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Регулировка громкости сигналов относительно медиа-громкости (музыка в наушниках). */
     fun setSignalVolume(volume: Float) {
-        val clamped = volume.coerceIn(0.5f, 1.5f)
+        val clamped = volume.coerceIn(1.5f, 2.5f)
         _uiState.update { it.copy(signalVolume = clamped) }
         prefs.edit { putFloat(KEY_SIGNAL_VOLUME, clamped) }
     }
