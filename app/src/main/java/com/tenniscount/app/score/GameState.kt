@@ -88,5 +88,13 @@ data class GameState(
             40 -> 3
             else -> null
         }
+
+        /**
+         * Допустима ли ручная правка очков на табло: правка не должна завершать
+         * гейм (иначе гейм засчитается молча, без сыгранного розыгрыша).
+         * «AD» возможен только при «40» у соперника.
+         */
+        fun isValidManualScore(pointsP1: Int, pointsP2: Int): Boolean =
+            pointsP1 in 0..4 && pointsP2 in 0..4 && GameState(pointsP1, pointsP2).winner == null
     }
 }

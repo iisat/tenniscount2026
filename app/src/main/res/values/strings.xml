@@ -37,6 +37,7 @@
     <string name="close">Закрыть</string>
 
     <string name="edit_game_title">Правка очков в гейме</string>
+    <string name="edit_game_would_finish">Такой счёт завершает гейм — правка очков не может заканчивать гейм</string>
     <string name="edit_set_title">Правка геймов в сете</string>
     <string name="apply">Применить</string>
     <string name="cancel">Отмена</string>

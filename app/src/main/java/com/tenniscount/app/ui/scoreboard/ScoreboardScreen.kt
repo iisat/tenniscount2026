@@ -480,6 +480,8 @@ private fun GameEditDialog(
     var p2 by remember { mutableIntStateOf(current.pointsP2) }
 
     val options = listOf("0" to 0, "15" to 1, "30" to 2, "40" to 3, "AD" to 4)
+    // Правка очков не должна молча завершать гейм: AD — только при 40 у соперника.
+    val wouldFinishGame = !GameState.isValidManualScore(p1, p2)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -487,12 +489,15 @@ private fun GameEditDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Player.entries.forEach { player ->
+                    val own = if (player == Player.ONE) p1 else p2
+                    val opponent = if (player == Player.ONE) p2 else p1
                     Text(state.name(player), style = MaterialTheme.typography.bodyMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         options.forEach { (label, value) ->
-                            val selected = if (player == Player.ONE) p1 == value else p2 == value
                             FilterChip(
-                                selected = selected,
+                                selected = own == value,
+                                // AD без 40 у соперника — это выигранный гейм, блокируем.
+                                enabled = value != 4 || opponent >= 3,
                                 onClick = {
                                     if (player == Player.ONE) p1 = value else p2 = value
                                 },
@@ -501,10 +506,17 @@ private fun GameEditDialog(
                         }
                     }
                 }
+                if (wouldFinishGame) {
+                    Text(
+                        text = stringResource(R.string.edit_game_would_finish),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(p1, p2) }) {
+            TextButton(onClick = { onApply(p1, p2) }, enabled = !wouldFinishGame) {
                 Text(stringResource(R.string.apply))
             }
         },

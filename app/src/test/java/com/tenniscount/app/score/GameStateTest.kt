@@ -83,6 +83,36 @@ class GameStateTest {
     }
 
     @Test
+    fun `isValidManualScore rejects scores that silently finish the game`() {
+        // AD против 0/15/30 — гейм уже выигран, правка очков не должна это позволять.
+        assertFalse(GameState.isValidManualScore(4, 0))
+        assertFalse(GameState.isValidManualScore(4, 1))
+        assertFalse(GameState.isValidManualScore(4, 2))
+        assertFalse(GameState.isValidManualScore(0, 4))
+        assertFalse(GameState.isValidManualScore(1, 4))
+        assertFalse(GameState.isValidManualScore(2, 4))
+    }
+
+    @Test
+    fun `isValidManualScore accepts playable scores`() {
+        assertTrue(GameState.isValidManualScore(0, 0))
+        assertTrue(GameState.isValidManualScore(2, 1)) // 30-15
+        assertTrue(GameState.isValidManualScore(3, 2)) // 40-30
+        assertTrue(GameState.isValidManualScore(3, 3)) // ровно
+        assertTrue(GameState.isValidManualScore(4, 3)) // AD
+        assertTrue(GameState.isValidManualScore(3, 4)) // AD соперника
+        assertTrue(GameState.isValidManualScore(4, 4)) // снова ровно
+    }
+
+    @Test
+    fun `isValidManualScore rejects out-of-range values`() {
+        assertFalse(GameState.isValidManualScore(-1, 0))
+        assertFalse(GameState.isValidManualScore(0, -1))
+        assertFalse(GameState.isValidManualScore(5, 3))
+        assertFalse(GameState.isValidManualScore(3, 5))
+    }
+
+    @Test
     fun `pointsToCount maps tennis values only`() {
         assertEquals(0, GameState.pointsToCount(0))
         assertEquals(1, GameState.pointsToCount(15))
