@@ -57,7 +57,7 @@
   (opus #4)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="161-181" />
 
-- [ ] **5. `START_STICKY` без восстановления состояния распознавания**
+- [x] **5. `START_STICKY` без восстановления состояния распознавания**
   После убийства процесса Android перезапускает `ListeningService` с `intent == null`;
   срабатывает ветка, поднимающая уведомление «слушает счёт» с пустым состоянием,
   но `ListeningController`/`VoskRecognizer` фактически не слушают (пересоздаются в

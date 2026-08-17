@@ -369,7 +369,14 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         )
         // Держим аудиотракт «тёплым», иначе холодный старт съедает короткие сигналы.
         SignalPlayer.setKeepAlive(true)
-        viewModelScope.launch { controller.start() }
+        viewModelScope.launch {
+            // При ошибке запуска (модель не загрузилась/повреждена, микрофон
+            // не стартовал) гасим сервис и keepAlive, иначе они «зависнут».
+            if (!controller.start()) {
+                Log.w(TAG, "startListening: распознавание не запустилось — останавливаем сервис")
+                stopListening()
+            }
+        }
     }
 
     fun clearWarning() = _uiState.update { it.copy(warning = null) }

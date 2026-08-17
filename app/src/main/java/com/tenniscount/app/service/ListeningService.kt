@@ -31,7 +31,14 @@ class ListeningService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "onStartCommand: action=${intent?.action ?: "START"}")
-        when (intent?.action) {
+        if (intent == null) {
+            // Рестарт после убийства процесса: распознавание не восстановлено,
+            // показывать «фантомное» уведомление о прослушивании нельзя.
+            Log.w(TAG, "onStartCommand: рестарт без интента — останавливаемся")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        when (intent.action) {
             ACTION_STOP -> {
                 ListeningController.get(this).onStopRequested?.invoke()
                 stopSelf()
@@ -47,11 +54,14 @@ class ListeningService : Service() {
                 refreshNotification()
             }
             else -> {
-                scoreText = intent?.getStringExtra(EXTRA_TEXT).orEmpty()
+                scoreText = intent.getStringExtra(EXTRA_TEXT).orEmpty()
                 startForegroundWithNotification()
             }
         }
-        return START_STICKY
+        // NOT_STICKY: после убийства процесса распознавание всё равно
+        // не восстановится (ListeningController пересоздаётся в OFF), поэтому
+        // сервис не должен воскресать сам — пользователь запустит его заново.
+        return START_NOT_STICKY
     }
 
     private fun startForegroundWithNotification() {
