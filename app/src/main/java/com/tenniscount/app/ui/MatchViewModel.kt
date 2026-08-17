@@ -269,12 +269,14 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     fun editGameScore(pointsP1: Int, pointsP2: Int) {
         engine?.editGameScore(pointsP1, pointsP2)
-        sync()
+        // Ручная правка — не розыгрыш: без звонка и TTS-объявления переходов.
+        sync(silent = true)
     }
 
     fun editSetScore(gamesP1: Int, gamesP2: Int) {
         engine?.editSetScore(gamesP1, gamesP2)
-        sync()
+        // Ручная правка — не розыгрыш: без звонка и TTS-объявления переходов.
+        sync(silent = true)
     }
 
     fun togglePause() {
@@ -682,9 +684,18 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         tts = null
     }
 
-    private fun sync(screen: Screen? = null) {
+    /**
+     * [silent] — изменение не от розыгрыша (ручная правка счёта): переходы
+     * не сигнализируются звонком/TTS, но [lastSyncedState] всё равно обновляется,
+     * чтобы следующее сыгранное очко сравнивалось с актуальным счётом.
+     */
+    private fun sync(screen: Screen? = null, silent: Boolean = false) {
         val e = engine ?: return
-        signalGameTransitions(e.state)
+        if (silent) {
+            lastSyncedState = e.state
+        } else {
+            signalGameTransitions(e.state)
+        }
         _uiState.update {
             it.copy(
                 matchState = e.state,
