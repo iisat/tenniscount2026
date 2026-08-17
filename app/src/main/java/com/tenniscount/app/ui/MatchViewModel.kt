@@ -5,10 +5,13 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -38,6 +41,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import java.util.Locale
 
 enum class Screen { SETUP, SCOREBOARD, HISTORY }
@@ -104,6 +109,26 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     /** Озвучка счёта по команде «счёт» (on-device TTS, русский). */
     private var tts: TextToSpeech? = null
 
+    private val audioManager = application.getSystemService(AudioManager::class.java)
+
+    /**
+     * Фокус с приглушением музыки на время объявлений (звонок гейма/сета, TTS).
+     * Работает, если музыкальный плеер уважает AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+     * (Spotify, Яндекс Музыка и др. приглушаются). Короткие beep не приглушают
+     * музыку: duck не успевает сработать за 150 мс.
+     */
+    private val duckFocusRequest =
+        AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .build(),
+            )
+            .build()
+
+    /** Счётчик активных объявлений: фокус держим, пока звучит хоть одно. */
+    private var duckCount = 0
+
     /** Завершённые матчи (история), новые сверху. */
     val history: StateFlow<List<FinishedMatchEntity>> = db.matchDao().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -138,6 +163,14 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                             .build(),
                     )
                     Log.d(TAG, "tts: setLanguage(ru)=${t.setLanguage(Locale("ru"))}")
+                    t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) = Unit
+                        override fun onDone(utteranceId: String?) = releaseDuck()
+                        override fun onStop(utteranceId: String?, interrupted: Boolean) =
+                            releaseDuck()
+                        @Deprecated("onError(String, Int) делегирует сюда")
+                        override fun onError(utteranceId: String?) = releaseDuck()
+                    })
                 }
             }.also { tts = it }
         }.onFailure { Log.w(TAG, "tts: недоступен", it) }
@@ -436,11 +469,33 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Озвучка через on-device TTS. [enqueue] = true — фраза встаёт в очередь
      * следом за уже звучащей (например, «сет-поинт» после счёта гейма).
+     * На время речи музыка приглушается (фокус снимается в колбэке utterance).
      */
     private fun speak(text: String, enqueue: Boolean = false) {
+        val t = tts ?: return
         val mode = if (enqueue) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
-        runCatching { tts?.speak(text, mode, null, "score") }
+        requestDuck()
+        val result = runCatching { t.speak(text, mode, null, "score-${utteranceSeq++}") }
             .onFailure { Log.w(TAG, "tts: ошибка озвучки", it) }
+        if (result.getOrNull() != TextToSpeech.SUCCESS) releaseDuck()
+    }
+
+    private var utteranceSeq = 0
+
+    private fun requestDuck() {
+        duckCount++
+        if (duckCount == 1) {
+            Log.d(TAG, "duck: запрос фокуса (приглушение музыки)")
+            audioManager.requestAudioFocus(duckFocusRequest)
+        }
+    }
+
+    private fun releaseDuck() {
+        if (duckCount == 0) return
+        if (--duckCount == 0) {
+            Log.d(TAG, "duck: фокус возвращён музыке")
+            audioManager.abandonAudioFocusRequest(duckFocusRequest)
+        }
     }
 
     /** Короткий beep — подтверждение, что объявление услышано, не глядя на экран. */
@@ -465,37 +520,58 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 repeat(times * 2) { beep(); delay(300) }
                 return@launch
             }
-            repeat(times) { i ->
-                playRingtone(uri)
-                if (i < times - 1) delay(400)
+            // Музыка приглушается на всю серию звонков, а не дёргается на каждый.
+            requestDuck()
+            try {
+                repeat(times) { i ->
+                    playRingtone(uri)
+                    if (i < times - 1) delay(400)
+                }
+            } finally {
+                releaseDuck()
             }
         }
     }
 
     /**
      * Звонок через MediaPlayer (у Ringtone нет регулировки громкости).
-     * Медиа-канал + относительная громкость сигналов.
+     * Медиа-канал + относительная громкость сигналов; возвращается по окончании.
      */
-    private fun playRingtone(uri: Uri) {
-        runCatching {
-            val volume = _uiState.value.signalVolume
-            MediaPlayer().apply {
-                setDataSource(getApplication(), uri)
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build(),
-                )
-                setVolume(volume, volume)
-                setOnPreparedListener { it.start() }
-                setOnCompletionListener { it.release() }
-                prepareAsync()
+    private suspend fun playRingtone(uri: Uri) {
+        suspendCancellableCoroutine<Unit> { cont ->
+            runCatching {
+                val volume = _uiState.value.signalVolume
+                val player = MediaPlayer().apply {
+                    setDataSource(getApplication(), uri)
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .build(),
+                    )
+                    setVolume(volume, volume)
+                    setOnPreparedListener { it.start() }
+                    setOnCompletionListener {
+                        it.release()
+                        if (cont.isActive) cont.resume(Unit)
+                    }
+                    setOnErrorListener { mp, _, _ ->
+                        mp.release()
+                        if (cont.isActive) cont.resume(Unit)
+                        true
+                    }
+                }
+                cont.invokeOnCancellation { runCatching { player.release() } }
+                player.prepareAsync()
+            }.onFailure {
+                Log.w(TAG, "ring: ошибка воспроизведения", it)
+                if (cont.isActive) cont.resume(Unit)
             }
-        }.onFailure { Log.w(TAG, "ring: ошибка воспроизведения", it) }
+        }
     }
 
     override fun onCleared() {
         stopListening()
+        audioManager.abandonAudioFocusRequest(duckFocusRequest)
         controller.listener = null
         controller.onPauseToggleRequested = null
         controller.onStopRequested = null
