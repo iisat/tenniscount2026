@@ -264,6 +264,27 @@ class MatchEngineTest {
     }
 
     @Test
+    fun `restore sets state and log, undo history is cleared`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.addPoint(Player.ONE)
+        val saved = engine.state
+        val savedLog = engine.log
+
+        val restored = MatchEngine(firstServer = Player.TWO)
+        restored.restore(saved, savedLog)
+
+        assertEquals(saved, restored.state)
+        assertEquals(savedLog, restored.log)
+        assertFalse(restored.canUndo) // история отмены не переживает восстановление
+
+        // Новые действия после восстановления работают и отменяются.
+        restored.addPoint(Player.TWO)
+        assertTrue(restored.canUndo)
+        assertTrue(restored.undo())
+        assertEquals(saved, restored.state)
+    }
+
+    @Test
     fun `log records events`() {
         val engine = MatchEngine(firstServer = Player.ONE)
         engine.addPoint(Player.ONE)

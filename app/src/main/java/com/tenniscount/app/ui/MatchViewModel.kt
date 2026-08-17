@@ -22,6 +22,7 @@ import com.tenniscount.app.data.MatchDatabase
 import com.tenniscount.app.score.ApplyResult
 import com.tenniscount.app.score.MatchEngine
 import com.tenniscount.app.score.MatchState
+import com.tenniscount.app.score.MatchStateCodec
 import com.tenniscount.app.score.MatchSummary
 import com.tenniscount.app.score.Player
 import com.tenniscount.app.score.RejectionReason
@@ -89,6 +90,10 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(
         // coerceIn: в старых версиях диапазон был ниже — значение подтягивается к минимуму 1.5.
         MatchUiState(
+            player1Name = prefs.getString(KEY_PLAYER1_NAME, null) ?: "Игрок 1",
+            player2Name = prefs.getString(KEY_PLAYER2_NAME, null) ?: "Игрок 2",
+            firstServer = prefs.getString(KEY_FIRST_SERVER, null)
+                ?.let { runCatching { Player.valueOf(it) }.getOrNull() } ?: Player.ONE,
             signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 2f).coerceIn(1.5f, 2.5f),
             speakGameEnd = prefs.getBoolean(KEY_SPEAK_GAME_END, true),
             speakSetPoint = prefs.getBoolean(KEY_SPEAK_SET_POINT, true),
@@ -175,6 +180,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             }.also { tts = it }
         }.onFailure { Log.w(TAG, "tts: недоступен", it) }
 
+        restoreSavedMatch()
         controller.listener = recognitionListener
         // Действия из уведомления foreground-сервиса (экран выключен).
         controller.onPauseToggleRequested = { togglePause() }
@@ -193,11 +199,20 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setPlayer1Name(name: String) = _uiState.update { it.copy(player1Name = name) }
+    fun setPlayer1Name(name: String) {
+        _uiState.update { it.copy(player1Name = name) }
+        prefs.edit { putString(KEY_PLAYER1_NAME, name) }
+    }
 
-    fun setPlayer2Name(name: String) = _uiState.update { it.copy(player2Name = name) }
+    fun setPlayer2Name(name: String) {
+        _uiState.update { it.copy(player2Name = name) }
+        prefs.edit { putString(KEY_PLAYER2_NAME, name) }
+    }
 
-    fun setFirstServer(player: Player) = _uiState.update { it.copy(firstServer = player) }
+    fun setFirstServer(player: Player) {
+        _uiState.update { it.copy(firstServer = player) }
+        prefs.edit { putString(KEY_FIRST_SERVER, player.name) }
+    }
 
     fun startMatch() {
         engine = MatchEngine(_uiState.value.firstServer)
@@ -242,6 +257,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         if (state != null) {
             saveMatch(state, s.player1Name, s.player2Name, s.log)
         }
+        // Матч завершён — сохранённый слепок больше не нужен.
+        clearPersistedMatch()
         _uiState.update { it.copy(finished = true, paused = false) }
     }
 
@@ -251,6 +268,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val s = _uiState.value
         engine = null
         lastSyncedState = null
+        clearPersistedMatch()
         _uiState.value = MatchUiState(
             player1Name = s.player1Name,
             player2Name = s.player2Name,
@@ -590,7 +608,47 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 screen = screen ?: it.screen,
             )
         }
+        persistCurrentMatch()
         updateNotification()
+    }
+
+    // --- Персистентность незавершённого матча ---
+
+    /**
+     * Слепок текущего матча в SharedPreferences — счёт переживает закрытие
+     * приложения и сбрасывается только по «Завершить матч» / «Новый матч».
+     */
+    private fun persistCurrentMatch() {
+        val e = engine ?: return
+        prefs.edit {
+            putString(KEY_MATCH_STATE, MatchStateCodec.encode(e.state))
+            putString(KEY_MATCH_LOG, e.log.joinToString("\n"))
+        }
+    }
+
+    private fun clearPersistedMatch() {
+        prefs.edit {
+            remove(KEY_MATCH_STATE)
+            remove(KEY_MATCH_LOG)
+        }
+    }
+
+    /** Восстановление незавершённого матча при запуске приложения. */
+    private fun restoreSavedMatch() {
+        val saved = prefs.getString(KEY_MATCH_STATE, null) ?: return
+        val state = MatchStateCodec.decode(saved) ?: return
+        val log = prefs.getString(KEY_MATCH_LOG, "").orEmpty()
+            .split("\n").filter { it.isNotEmpty() }
+        engine = MatchEngine(state.firstServer).apply {
+            strictValidation = _uiState.value.strictValidation
+            restore(state, log)
+        }
+        // Сигналы о переходах сравнивают с lastSyncedState: восстановленное
+        // состояние не должно вызывать звонок гейма/сета при первом sync().
+        lastSyncedState = state
+        _uiState.update {
+            it.copy(screen = Screen.SCOREBOARD, matchState = state, log = log)
+        }
     }
 
     /**
@@ -641,5 +699,10 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_SPEAK_SET_POINT = "speak_set_point"
         const val KEY_SPEAK_SET_END = "speak_set_end"
         const val KEY_STRICT_VALIDATION = "strict_validation"
+        const val KEY_PLAYER1_NAME = "player1_name"
+        const val KEY_PLAYER2_NAME = "player2_name"
+        const val KEY_FIRST_SERVER = "first_server"
+        const val KEY_MATCH_STATE = "current_match_state"
+        const val KEY_MATCH_LOG = "current_match_log"
     }
 }

@@ -77,6 +77,18 @@ class MatchEngine(firstServer: Player) {
         _log += entry
     }
 
+    /**
+     * Восстанавливает сохранённое состояние (незавершённый матч между запусками
+     * приложения). История отмены не сохраняется: undo доступен только для
+     * действий после восстановления.
+     */
+    fun restore(state: MatchState, log: List<String>) {
+        undoStack.clear()
+        this.state = state
+        _log.clear()
+        _log.addAll(log)
+    }
+
     /** Отмена последнего действия. Возвращает false, если отменять нечего. */
     fun undo(): Boolean {
         val previous = undoStack.removeLastOrNull() ?: return false
