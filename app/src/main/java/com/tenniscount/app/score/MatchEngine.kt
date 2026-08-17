@@ -1,5 +1,7 @@
 package com.tenniscount.app.score
 
+import kotlin.math.abs
+
 /**
  * Объявление счёта, распознанное из речи (или введённое вручную).
  * Числа всегда идут в порядке объявления: сначала очки подающего.
@@ -137,11 +139,14 @@ class MatchEngine(firstServer: Player) {
                 if (strictValidation && game.isDeuce) {
                     return ApplyResult.Rejected(RejectionReason.DUPLICATE)
                 }
-                // Строгая валидация: «ровно» допустимо только из зоны deuce/advantage
-                // (оба игрока набрали не менее «40»). Из обычных счётов 0:0, 40:30 и т.п.
-                // объявление недостижимо за один розыгрыш.
-                if (strictValidation && (game.pointsP1 < 3 || game.pointsP2 < 3)) {
-                    return ApplyResult.Rejected(RejectionReason.SKIP)
+                // Строгая валидация: «ровно» должно быть достижимо ровно одним
+                // следующим розыгрышем (например, 40:30 -> 40:40).
+                if (strictValidation) {
+                    val reachable = !game.isFinished &&
+                        Player.entries.any { game.withPoint(it).isDeuce }
+                    if (!reachable) {
+                        return ApplyResult.Rejected(RejectionReason.SKIP)
+                    }
                 }
                 // «Ровно» допустимо и из advantage (соперник сравнял): выравниваем счёт.
                 val base = maxOf(3, game.pointsP1, game.pointsP2)
@@ -151,18 +156,21 @@ class MatchEngine(firstServer: Player) {
 
             is Announcement.Advantage -> {
                 val advPlayer = if (announcement.toServer) server else server.opponent
-                if (strictValidation) when {
-                    game.advantagePlayer == advPlayer ->
-                        return ApplyResult.Rejected(RejectionReason.DUPLICATE)
-                    // Преимущество достижимо только из ровного счёта (deuce).
-                    // Из любого другого состояния — пропуск очков или прямая смена преимущества.
-                    !game.isDeuce ->
-                        return ApplyResult.Rejected(RejectionReason.SKIP)
-                }
                 val base = maxOf(3, game.pointsP1, game.pointsP2)
                 val announced = when (advPlayer) {
                     Player.ONE -> GameState(base + 1, base)
                     Player.TWO -> GameState(base, base + 1)
+                }
+                if (strictValidation) {
+                    // Повторное «больше»/«меньше» того же игрока — дубликат.
+                    if (game.advantageOf(advPlayer)) {
+                        return ApplyResult.Rejected(RejectionReason.DUPLICATE)
+                    }
+                    val reachable = !game.isFinished &&
+                        Player.entries.any { game.withPoint(it) == announced }
+                    if (!reachable) {
+                        return ApplyResult.Rejected(RejectionReason.SKIP)
+                    }
                 }
                 mutate(state.withCurrentGame(announced), "Объявлено: больше (${advPlayer.displayName})")
                 ApplyResult.Applied
@@ -187,6 +195,12 @@ class MatchEngine(firstServer: Player) {
         state = newState
         _log += logEntry
     }
+
+    /** Истинное преимущество (не путать с 40:30). */
+    private fun GameState.advantageOf(player: Player): Boolean =
+        pointsP1 >= 3 && pointsP2 >= 3 && abs(pointsP1 - pointsP2) == 1 &&
+            ((player == Player.ONE && pointsP1 > pointsP2) ||
+                (player == Player.TWO && pointsP2 > pointsP1))
 
     private fun Int.toTennisPoints(): String = when (this) {
         0 -> "0"
