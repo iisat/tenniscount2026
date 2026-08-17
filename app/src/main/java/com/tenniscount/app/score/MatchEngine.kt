@@ -39,6 +39,15 @@ sealed interface ApplyResult {
     data class Rejected(val reason: RejectionReason) : ApplyResult
 }
 
+/** Источник изменения счёта: розыгрыш/объявление или ручная правка. */
+enum class ChangeSource {
+    /** Сыгранное очко или голосовое объявление — отражает реальный розыгрыш. */
+    PLAY,
+
+    /** Ручная правка счёта из диалога — розыгрыша не было. */
+    MANUAL_EDIT,
+}
+
 /**
  * Движок матча: хранит текущее [MatchState], применяет очки, объявления и
  * ручные правки, ведёт историю для отмены последнего действия и лог событий.
@@ -54,7 +63,10 @@ class MatchEngine(firstServer: Player) {
     var state: MatchState = MatchState(firstServer = firstServer)
         private set
 
-    private val undoStack = ArrayDeque<MatchState>()
+    /** Запись истории отмены: состояние до действия + источник этого действия. */
+    private data class UndoEntry(val state: MatchState, val source: ChangeSource)
+
+    private val undoStack = ArrayDeque<UndoEntry>()
     private val _log = mutableListOf<String>()
 
     /** Лог объявлений и изменений счёта (для экрана истории). */
@@ -91,12 +103,16 @@ class MatchEngine(firstServer: Player) {
         _log.addAll(log)
     }
 
-    /** Отмена последнего действия. Возвращает false, если отменять нечего. */
-    fun undo(): Boolean {
-        val previous = undoStack.removeLastOrNull() ?: return false
-        state = previous
+    /**
+     * Отмена последнего действия. Возвращает источник отменённого действия
+     * (UI подавляет сигналы переходов при отмене ручной правки) либо null,
+     * если отменять нечего.
+     */
+    fun undo(): ChangeSource? {
+        val entry = undoStack.removeLastOrNull() ?: return null
+        state = entry.state
         _log += "Отмена последнего действия"
-        return true
+        return entry.source
     }
 
     /**
@@ -187,17 +203,29 @@ class MatchEngine(firstServer: Player) {
         require(GameState.isValidManualScore(pointsP1, pointsP2)) {
             "Ручная правка очков не может завершать гейм: $pointsP1-$pointsP2"
         }
-        mutate(state.withCurrentGame(GameState(pointsP1, pointsP2)), "Правка очков: $pointsP1-$pointsP2")
+        mutate(
+            state.withCurrentGame(GameState(pointsP1, pointsP2)),
+            "Правка очков: $pointsP1-$pointsP2",
+            ChangeSource.MANUAL_EDIT,
+        )
     }
 
     /** Ручная правка счёта геймов в текущем сете. */
     fun editSetScore(gamesP1: Int, gamesP2: Int) {
         require(gamesP1 >= 0 && gamesP2 >= 0) { "Недопустимый счёт сета" }
-        mutate(state.withGames(gamesP1, gamesP2), "Правка геймов: $gamesP1:$gamesP2")
+        mutate(
+            state.withGames(gamesP1, gamesP2),
+            "Правка геймов: $gamesP1:$gamesP2",
+            ChangeSource.MANUAL_EDIT,
+        )
     }
 
-    private fun mutate(newState: MatchState, logEntry: String) {
-        undoStack.addLast(state)
+    private fun mutate(
+        newState: MatchState,
+        logEntry: String,
+        source: ChangeSource = ChangeSource.PLAY,
+    ) {
+        undoStack.addLast(UndoEntry(state, source))
         state = newState
         _log += logEntry
     }

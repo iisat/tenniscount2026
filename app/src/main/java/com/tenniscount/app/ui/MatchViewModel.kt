@@ -20,6 +20,7 @@ import androidx.lifecycle.viewModelScope
 import com.tenniscount.app.data.FinishedMatchEntity
 import com.tenniscount.app.data.MatchDatabase
 import com.tenniscount.app.score.ApplyResult
+import com.tenniscount.app.score.ChangeSource
 import com.tenniscount.app.score.MatchEngine
 import com.tenniscount.app.score.MatchState
 import com.tenniscount.app.score.MatchStateCodec
@@ -263,8 +264,10 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun undo() {
-        engine?.undo()
-        sync()
+        // Отмена ручной правки — тоже не розыгрыш: без звонка/TTS переходов,
+        // иначе undo правки вниз (4:1 → 2:1) вернёт 4:1 с ложным «Гейм».
+        val undone = engine?.undo()
+        sync(silent = undone == ChangeSource.MANUAL_EDIT)
     }
 
     fun editGameScore(pointsP1: Int, pointsP2: Int) {
@@ -424,6 +427,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val prev = currentEngine.state
 
         currentEngine.logNote("Распознано: «$rawText»")
+        var silentSync = false
         when (command) {
             is VoiceCommand.Score ->
                 when (val result = currentEngine.applyAnnouncement(command.announcement)) {
@@ -452,7 +456,12 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-            VoiceCommand.Undo -> if (currentEngine.undo()) beep() else nack()
+            VoiceCommand.Undo -> {
+                val undone = currentEngine.undo()
+                if (undone == null) nack() else beep()
+                // Отмена ручной правки — не розыгрыш: sync ниже не должен сигналить.
+                silentSync = undone == ChangeSource.MANUAL_EDIT
+            }
 
             VoiceCommand.ScoreQuery -> {
                 // Проговариваем записанный счёт гейма; сама речь — и есть подтверждение.
@@ -485,7 +494,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        sync()
+        sync(silent = silentSync)
     }
 
     /**

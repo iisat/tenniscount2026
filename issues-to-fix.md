@@ -130,7 +130,14 @@
   Исправлено: `sync()` получил признак `silent` — `editGameScore`/`editSetScore`
   вызывают `sync(silent = true)`, при котором `signalGameTransitions` не вызывается
   (нет ни звонка, ни TTS), но `lastSyncedState` всё равно обновляется, чтобы
-  следующее сыгранное очко сравнивалось с актуальным счётом.
+  следующее сыгранное очко сравнивалось с актуальным счётом. Edge-case с undo
+  закрыт метаданными в движке: `MatchEngine` хранит в стеке отмены источник
+  действия (`ChangeSource.PLAY`/`MANUAL_EDIT`), `undo()` возвращает источник
+  отменённого действия, и ViewModel делает `sync(silent = true)` при отмене
+  ручной правки — иначе undo правки вниз (4:1 → 2:1) вернул бы 4:1 с ложным
+  звонком «Гейм». Покрыто тестами `MatchEngineTest.undo reports source of
+  undone action` и `undo of manual edit down restores higher score and reports
+  MANUAL_EDIT`.
   (opus #8)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="659-682" />
 

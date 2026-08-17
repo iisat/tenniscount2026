@@ -2,6 +2,7 @@ package com.tenniscount.app.score
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -280,10 +281,10 @@ class MatchEngineTest {
         engine.playGame(Player.ONE)
         assertEquals(Player.TWO, engine.state.server)
 
-        assertTrue(engine.undo())
+        assertEquals(ChangeSource.PLAY, engine.undo())
         assertEquals(Player.ONE, engine.state.server)
         assertEquals(MatchState(firstServer = Player.ONE), engine.state)
-        assertFalse(engine.undo()) // больше нечего отменять
+        assertNull(engine.undo()) // больше нечего отменять
     }
 
     @Test
@@ -337,9 +338,48 @@ class MatchEngineTest {
         assertEquals(listOf(SetScore(6, 4)), engine.state.completedSets)
         assertEquals(SetState(), engine.state.currentSet)
 
-        assertTrue(engine.undo()) // правку можно отменить
+        assertEquals(ChangeSource.MANUAL_EDIT, engine.undo()) // правку можно отменить
         assertEquals(0, engine.state.completedSets.size)
         assertEquals(1, engine.state.currentSet.gamesP1)
+        assertEquals(0, engine.state.currentSet.gamesP2)
+    }
+
+    @Test
+    fun `undo reports source of undone action`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+
+        engine.addPoint(Player.ONE)
+        assertEquals(ChangeSource.PLAY, engine.undo())
+
+        engine.editGameScore(3, 3) // 40-40
+        assertEquals(ChangeSource.MANUAL_EDIT, engine.undo())
+
+        engine.editSetScore(4, 1)
+        assertEquals(ChangeSource.MANUAL_EDIT, engine.undo())
+
+        engine.applyAnnouncement(Announcement.Points(1, 0))
+        assertEquals(ChangeSource.PLAY, engine.undo())
+
+        assertNull(engine.undo()) // история пуста
+    }
+
+    // Regression (#9): undo ручной правки вниз возвращает счёт с большим
+    // totalGames — UI полагается на ChangeSource.MANUAL_EDIT, чтобы подавить
+    // ложный звонок/TTS «Гейм».
+    @Test
+    fun `undo of manual edit down restores higher score and reports MANUAL_EDIT`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        repeat(4) { engine.playGame(Player.ONE) }
+        engine.playGame(Player.TWO) // 4:1
+        engine.editSetScore(2, 1) // ошибочная правка вниз
+
+        assertEquals(ChangeSource.MANUAL_EDIT, engine.undo())
+        assertEquals(4, engine.state.currentSet.gamesP1)
+        assertEquals(1, engine.state.currentSet.gamesP2)
+
+        // Отмена последнего сыгранного гейма (его выиграл игрок 2) — обычный PLAY.
+        assertEquals(ChangeSource.PLAY, engine.undo())
+        assertEquals(4, engine.state.currentSet.gamesP1)
         assertEquals(0, engine.state.currentSet.gamesP2)
     }
 
@@ -360,7 +400,7 @@ class MatchEngineTest {
         // Новые действия после восстановления работают и отменяются.
         restored.addPoint(Player.TWO)
         assertTrue(restored.canUndo)
-        assertTrue(restored.undo())
+        assertEquals(ChangeSource.PLAY, restored.undo())
         assertEquals(saved, restored.state)
     }
 
