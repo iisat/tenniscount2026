@@ -21,15 +21,26 @@
 ## Структура
 
 - Задание и статус этапов (M1–M5): `task.md` — при возобновлении читать его целиком.
-- Ядро счёта (чистый Kotlin, без Android-зависимостей): `app/src/main/java/com/tenniscount/app/score/`.
+- Ядро счёта (чистый Kotlin, без Android-зависимостей): `app/src/main/java/com/tenniscount/app/score/` —
+  `MatchEngine.kt` (правила + `strictValidation`), `GameState/SetState/MatchState`,
+  `MatchSummary.kt`, `ScoreSpeech.kt` (фразы TTS), `MatchStateCodec.kt`
+  (сериализация состояния матча в строку для SharedPreferences).
 - Распознавание речи: `app/src/main/java/com/tenniscount/app/speech/` —
   `ScoreParser.kt` (чистый Kotlin, unit-тесты), `ModelManager.kt` (скачивание русской
   small-модели Vosk ~45 МБ при первом запуске), `VoskRecognizer.kt` (обёртка над Vosk,
-  грамматика ограничена словами счёта).
+  грамматика ограничена словами счёта: ноль/нуль/пятнадцать/тридцать/сорок/ровно/больше/
+  меньше/гейм/сет/сколько/отмена/отмени + `[unk]`; слова «счёт» в грамматике нет —
+  запрос счёта это «сколько»).
 - Фон и сервис: `app/src/main/java/com/tenniscount/app/service/` — `ListeningController.kt`
   (синглтон, владеет VoskRecognizer и состоянием прослушивания), `ListeningService.kt`
   (foreground service типа `microphone`, уведомление со счётом и кнопками Пауза/Стоп;
   остановка из ViewModel — только через `stopService`, не интентом ACTION_STOP, иначе зациклится).
+- Звуковые сигналы: `app/src/main/java/com/tenniscount/app/ui/SignalPlayer.kt` — тоны
+  синтезируются (PCM) и играются через AudioTrack на медиа-канале (не ToneGenerator —
+  иначе громкость ограничена 100%); на время прослушивания тракт держится «тёплым»
+  потоком тишины (`setKeepAlive`), иначе холодный старт съедает короткий сигнал.
+- UI: `ui/` — `MatchViewModel.kt` (состояние, настройки, TTS, персист),
+  экраны `setup/`, `scoreboard/`, `history/`.
 - История матчей: `app/src/main/java/com/tenniscount/app/data/` — Room (KSP),
   сохранение при «Завершить матч», экран `ui/history/`.
 - Тесты: `app/src/test/java/com/tenniscount/app/score/` и `.../speech/`.
@@ -38,8 +49,15 @@
 
 - PowerShell: heredoc-синтаксис bash (`cat <<'EOF'`) не работает — для длинных сообщений
   коммита использовать несколько флагов `git commit -m ... -m ...`.
-- ASR: Vosk `com.alphacephei:vosk-android:0.3.47` (Maven Central). Разрешения
+- ASR: Vosk `com.alphacephei:vosk-android:0.3.75` (Maven Central) — версия с нативными
+  библиотеками, выровненными под 16 KB страницы (требование Google Play). Разрешения
   RECORD_AUDIO (runtime-запрос на табло) и INTERNET (только для загрузки модели) — в манифесте.
   Также FOREGROUND_SERVICE + FOREGROUND_SERVICE_MICROPHONE (сервис прослушивания) и
   POST_NOTIFICATIONS (runtime-запрос вместе с RECORD_AUDIO на Android 13+).
 - БД: Room 2.6.1 через KSP (`com.google.devtools.ksp` 2.0.21-1.0.28) — версии в `libs.versions.toml`.
+- Настройки и персист: SharedPreferences `settings` (в `MatchViewModel`) — имена игроков,
+  первый подающий, громкость сигналов (относительная, 1.5–2.5), тумблеры TTS-озвучки,
+  `strictValidation` (по умолчанию включён; выключается на табло — тогда любое объявление
+  применяется как есть). Текущий матч (состояние через `MatchStateCodec` + лог)
+  сохраняется после каждого изменения и восстанавливается при запуске; сбрасывается
+  только «Завершить матч» / «Новый матч».
