@@ -66,17 +66,28 @@ class ListeningController private constructor(context: Context) {
     private val startMutex = Mutex()
 
     /**
+     * Поколение запуска: [stop] инкрементирует его, чем отменяет ещё
+     * выполняющийся [start] — тот после каждого долгого шага проверяет,
+     * что его поколение актуально, иначе завершается, не запуская микрофон.
+     */
+    @Volatile
+    private var startGeneration = 0
+
+    /**
      * Полный запуск: при необходимости скачивает модель, загружает её
      * и начинает прослушивание. Вызывать после проверки разрешения
      * RECORD_AUDIO и запуска foreground service (иначе Android 12+ не даст
      * доступ к микрофону из фона). Параллельный повторный вызов, пока идёт
      * запуск, — no-op, возвращает true (запуском владеет первый вызов).
+     * Если во время подготовки пришёл [stop], возвращает false и не
+     * запускает распознавание.
      */
     suspend fun start(): Boolean {
         if (!startMutex.tryLock()) {
             Log.i(TAG, "start: запуск уже идёт — пропускаем")
             return true
         }
+        val generation = ++startGeneration
         try {
             Log.i(TAG, "start: запуск прослушивания")
             _state.update { it.copy(error = null) }
@@ -88,8 +99,10 @@ class ListeningController private constructor(context: Context) {
                     }
                     _state.update { it.copy(downloadProgress = null) }
                 }
+                if (isCancelled(generation, "после загрузки модели")) return false
                 _state.update { it.copy(micState = MicState.PREPARING) }
                 recognizer.prepare()
+                if (isCancelled(generation, "после подготовки")) return false
                 if (recognizer.start()) {
                     Log.i(TAG, "start: микрофон слушает")
                     _state.update { it.copy(micState = MicState.LISTENING) }
@@ -115,6 +128,13 @@ class ListeningController private constructor(context: Context) {
         }
     }
 
+    /** true, если за время запуска пришёл [stop] — запуск отменён. */
+    private fun isCancelled(generation: Int, stage: String): Boolean {
+        if (generation == startGeneration) return false
+        Log.i(TAG, "start: отменён остановкой $stage")
+        return true
+    }
+
     /** Пауза прослушивания без остановки сервиса (экономия батареи). */
     fun setPaused(paused: Boolean) {
         Log.i(TAG, "setPaused: $paused")
@@ -123,6 +143,9 @@ class ListeningController private constructor(context: Context) {
 
     fun stop() {
         Log.i(TAG, "stop: прослушивание остановлено")
+        // Инвалидируем незавершённый start(): после ближайшей проверки
+        // поколения он завершится, не запуская микрофон.
+        startGeneration++
         recognizer.stop()
         _state.update { it.copy(micState = MicState.OFF, lastHeard = "") }
     }

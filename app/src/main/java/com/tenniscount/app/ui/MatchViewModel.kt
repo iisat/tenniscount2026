@@ -381,7 +381,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             // При ошибке запуска (модель не загрузилась/повреждена, микрофон
             // не стартовал) гасим сервис и keepAlive, иначе они «зависнут».
-            if (!controller.start()) {
+            // Если start() отменён пришедшим stop() (контроллер уже в OFF),
+            // повторная остановка не нужна.
+            if (!controller.start() && controller.state.value.micState != MicState.OFF) {
                 Log.w(TAG, "startListening: распознавание не запустилось — останавливаем сервис")
                 stopListening()
             }
