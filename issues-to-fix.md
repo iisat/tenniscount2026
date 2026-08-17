@@ -23,7 +23,7 @@
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\scoreboard\ScoreboardScreen.kt" lines="446-453" />
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\score\SetState.kt" lines="6-8" />
 
-- [ ] **2. Строгая валидация «ровно» / «больше» / «меньше» не работает**
+- [x] **2. Строгая валидация «ровно» / «больше» / «меньше» не работает**
   `MatchEngine.applyAnnouncement` для `Deuce`/`Advantage` не проверяет, что оба игрока
   уже находятся в зоне 40:40/advantage. Голосовая команда «ровно» при счёте 0:0
   выставляет 40:40, «больше» — 4:3. Ломает правило строгой валидации «на один розыгрыш»

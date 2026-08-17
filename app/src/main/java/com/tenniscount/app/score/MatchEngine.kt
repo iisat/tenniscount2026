@@ -137,6 +137,12 @@ class MatchEngine(firstServer: Player) {
                 if (strictValidation && game.isDeuce) {
                     return ApplyResult.Rejected(RejectionReason.DUPLICATE)
                 }
+                // Строгая валидация: «ровно» допустимо только из зоны deuce/advantage
+                // (оба игрока набрали не менее «40»). Из обычных счётов 0:0, 40:30 и т.п.
+                // объявление недостижимо за один розыгрыш.
+                if (strictValidation && (game.pointsP1 < 3 || game.pointsP2 < 3)) {
+                    return ApplyResult.Rejected(RejectionReason.SKIP)
+                }
                 // «Ровно» допустимо и из advantage (соперник сравнял): выравниваем счёт.
                 val base = maxOf(3, game.pointsP1, game.pointsP2)
                 mutate(state.withCurrentGame(GameState(base, base)), "Объявлено: ровно")
@@ -148,9 +154,9 @@ class MatchEngine(firstServer: Player) {
                 if (strictValidation) when {
                     game.advantagePlayer == advPlayer ->
                         return ApplyResult.Rejected(RejectionReason.DUPLICATE)
-                    // Прямая смена преимущества невозможна: после «больше»/«меньше»
-                    // может быть только «ровно» (соперник сравнял) или «гейм».
-                    game.advantagePlayer != null ->
+                    // Преимущество достижимо только из ровного счёта (deuce).
+                    // Из любого другого состояния — пропуск очков или прямая смена преимущества.
+                    !game.isDeuce ->
                         return ApplyResult.Rejected(RejectionReason.SKIP)
                 }
                 val base = maxOf(3, game.pointsP1, game.pointsP2)

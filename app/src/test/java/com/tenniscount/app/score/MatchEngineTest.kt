@@ -109,11 +109,13 @@ class MatchEngineTest {
     @Test
     fun `deuce and advantage announcements`() {
         val engine = MatchEngine(firstServer = Player.ONE)
-        engine.editGameScore(3, 2) // 40-30
+        engine.editGameScore(3, 3) // 40-40
 
-        // «ровно»: подающий — игрок 1
-        assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Deuce))
-        assertTrue(engine.state.currentSet.currentGame.isDeuce)
+        // «ровно» на уже ровном счёте — дубликат
+        assertEquals(
+            ApplyResult.Rejected(RejectionReason.DUPLICATE),
+            engine.applyAnnouncement(Announcement.Deuce),
+        )
 
         // «больше» у подающего (игрок 1)
         assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Advantage(toServer = true)))
@@ -128,6 +130,45 @@ class MatchEngineTest {
         // «ровно» после advantage — принимающий сравнял
         assertEquals(ApplyResult.Applied, engine.applyAnnouncement(Announcement.Deuce))
         assertTrue(engine.state.currentSet.currentGame.isDeuce)
+    }
+
+    @Test
+    fun `deuce and advantage require deuce zone under strict validation`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        val before = engine.state
+
+        // Из 0:0 нельзя сразу объявить «ровно» или «больше».
+        assertEquals(
+            ApplyResult.Rejected(RejectionReason.SKIP),
+            engine.applyAnnouncement(Announcement.Deuce),
+        )
+        assertEquals(
+            ApplyResult.Rejected(RejectionReason.SKIP),
+            engine.applyAnnouncement(Announcement.Advantage(toServer = true)),
+        )
+        assertEquals(before, engine.state)
+
+        // Из 40-30 «ровно» и «меньше» тоже недостижимы за один розыгрыш.
+        engine.editGameScore(3, 2) // 40-30
+        val beforeFortyThirty = engine.state
+        assertEquals(
+            ApplyResult.Rejected(RejectionReason.SKIP),
+            engine.applyAnnouncement(Announcement.Deuce),
+        )
+        assertEquals(
+            ApplyResult.Rejected(RejectionReason.SKIP),
+            engine.applyAnnouncement(Announcement.Advantage(toServer = false)),
+        )
+        assertEquals(beforeFortyThirty, engine.state)
+
+        // Из 30-30 — ещё не deuce/advantage.
+        engine.editGameScore(2, 2) // 30-30
+        val beforeThirtyAll = engine.state
+        assertEquals(
+            ApplyResult.Rejected(RejectionReason.SKIP),
+            engine.applyAnnouncement(Announcement.Deuce),
+        )
+        assertEquals(beforeThirtyAll, engine.state)
     }
 
     @Test
