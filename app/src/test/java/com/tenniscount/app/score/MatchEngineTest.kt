@@ -305,15 +305,27 @@ class MatchEngineTest {
     }
 
     @Test
-    fun `manual game score edit applies winning state as game win`() {
+    fun `manual game score edit applies playable score`() {
         val engine = MatchEngine(firstServer = Player.ONE)
         engine.editGameScore(3, 2) // 40-30
-        assertEquals(3, engine.state.currentSet.currentGame.pointsP1)
+        assertEquals(GameState(3, 2), engine.state.currentSet.currentGame)
 
-        engine.editGameScore(4, 1) // выигранный гейм -> засчитывается гейм
-        assertEquals(1, engine.state.currentSet.gamesP1)
-        assertEquals(GameState(), engine.state.currentSet.currentGame)
-        assertEquals(Player.TWO, engine.state.server)
+        engine.editGameScore(4, 3) // AD — допустимая правка, гейм не завершён
+        assertEquals(GameState(4, 3), engine.state.currentSet.currentGame)
+        assertEquals(0, engine.state.currentSet.gamesP1)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `manual game score edit cannot silently finish game`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.editGameScore(3, 2) // 40-30
+        engine.editGameScore(4, 1) // AD против 15 — это выигранный гейм, правка запрещена
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `manual game score edit cannot finish game from scratch`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.editGameScore(4, 0) // AD против 0 — выигранный гейм, правка запрещена
     }
 
     @Test

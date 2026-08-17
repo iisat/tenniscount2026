@@ -113,10 +113,13 @@
   другому. `GameState(4, 0).winner == ONE` немедленно засчитывает гейм — пользователь
   правил очки, а получил +1 гейм без предупреждения.
   Исправлено: в `GameState` добавлен предикат `isValidManualScore(p1, p2)` (правка
-  недопустима, если счёт завершает гейм); в `GameEditDialog` чип «AD» заблокирован,
-  пока у соперника меньше 40, а если выбранная комбинация всё равно завершает гейм
-  (AD у одного + понижение соперника ниже 40) — показывается предупреждение и кнопка
-  «Применить» отключена. Покрыто тестами `GameStateTest.isValidManualScore*`.
+  недопустима, если счёт завершает гейм); `MatchEngine.editGameScore` требует его
+  через `require` — domain-путь закрыт, молча засчитать гейм правкой нельзя ниоткуда.
+  В `GameEditDialog` чип «AD» заблокирован, пока у соперника меньше 40, а если
+  выбранная комбинация всё равно завершает гейм (AD у одного + понижение соперника
+  ниже 40) — показывается предупреждение и кнопка «Применить» отключена.
+  Покрыто тестами `GameStateTest.isValidManualScore*` и
+  `MatchEngineTest.manual game score edit cannot silently finish game*`.
   (opus #7)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\scoreboard\ScoreboardScreen.kt" lines="482" />
 

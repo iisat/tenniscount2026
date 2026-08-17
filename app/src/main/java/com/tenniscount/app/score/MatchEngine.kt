@@ -178,9 +178,15 @@ class MatchEngine(firstServer: Player) {
         }
     }
 
-    /** Ручная правка счёта в гейме (счётчики розыгрышей, 0..4). */
+    /**
+     * Ручная правка счёта в гейме (счётчики розыгрышей, 0..4).
+     * Правка не может завершать гейм: выигрыш гейма — только через [winGame]
+     * или сыгранное очко, иначе гейм засчитался бы молча, без розыгрыша.
+     */
     fun editGameScore(pointsP1: Int, pointsP2: Int) {
-        require(pointsP1 in 0..4 && pointsP2 in 0..4) { "Недопустимый счёт гейма" }
+        require(GameState.isValidManualScore(pointsP1, pointsP2)) {
+            "Ручная правка очков не может завершать гейм: $pointsP1-$pointsP2"
+        }
         mutate(state.withCurrentGame(GameState(pointsP1, pointsP2)), "Правка очков: $pointsP1-$pointsP2")
     }
 
