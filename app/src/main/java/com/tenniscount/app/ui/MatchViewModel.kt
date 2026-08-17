@@ -66,7 +66,7 @@ data class MatchUiState(
     val lastHeard: String = "",
     /** Предупреждение о противоречии объявления текущему счёту. */
     val warning: String? = null,
-    /** Относительная громкость сигналов приложения (150–250% от медиа-громкости). */
+    /** Относительная громкость сигналов приложения (100–200% от медиа-громкости). */
     val signalVolume: Float = 2f,
     /** Озвучивать счёт по геймам в конце гейма. */
     val speakGameEnd: Boolean = true,
@@ -88,13 +88,13 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private val _uiState = MutableStateFlow(
-        // coerceIn: в старых версиях диапазон был ниже — значение подтягивается к минимуму 1.5.
+        // coerceIn: в старых версиях диапазон был 1.5–2.5 — значение подтягивается к 1.0–2.0.
         MatchUiState(
             player1Name = prefs.getString(KEY_PLAYER1_NAME, null) ?: "Игрок 1",
             player2Name = prefs.getString(KEY_PLAYER2_NAME, null) ?: "Игрок 2",
             firstServer = prefs.getString(KEY_FIRST_SERVER, null)
                 ?.let { runCatching { Player.valueOf(it) }.getOrNull() } ?: Player.ONE,
-            signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 2f).coerceIn(1.5f, 2.5f),
+            signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 2f).coerceIn(1f, 2f),
             speakGameEnd = prefs.getBoolean(KEY_SPEAK_GAME_END, true),
             speakSetPoint = prefs.getBoolean(KEY_SPEAK_SET_POINT, true),
             speakSetEnd = prefs.getBoolean(KEY_SPEAK_SET_END, true),
@@ -498,7 +498,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Регулировка громкости сигналов относительно медиа-громкости (музыка в наушниках). */
     fun setSignalVolume(volume: Float) {
-        val clamped = volume.coerceIn(1.5f, 2.5f)
+        val clamped = volume.coerceIn(1f, 2f)
         _uiState.update { it.copy(signalVolume = clamped) }
         prefs.edit { putFloat(KEY_SIGNAL_VOLUME, clamped) }
     }
@@ -640,7 +640,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun playRingtone(uri: Uri) {
         suspendCancellableCoroutine<Unit> { cont ->
             runCatching {
-                val volume = _uiState.value.signalVolume
+                // MediaPlayer.setVolume выше 1.0 не усиливает — маппим 100–200% в 0.5–1.0,
+                // та же шкала 6 дБ, что и у синтезированных сигналов (SignalPlayer).
+                val volume = _uiState.value.signalVolume / 2f
                 val player = MediaPlayer().apply {
                     setDataSource(getApplication(), uri)
                     setAudioAttributes(
