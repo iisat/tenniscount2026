@@ -46,9 +46,15 @@ class VoskRecognizer(
         }
     }
 
-    /** Начинает прослушивание. Возвращает false при ошибке запуска микрофона. */
+    /**
+     * Начинает прослушивание. Возвращает false при ошибке запуска микрофона.
+     * Всегда начинает новую сессию: если предыдущая (например, после onError,
+     * из которого не был вызван stop()) ещё не была освобождена, она закрывается
+     * первой — иначе её Recognizer/SpeechService потерялись бы без close().
+     */
     fun start(): Boolean {
         val currentModel = model ?: return false
+        stop()
         var newRecognizer: Recognizer? = null
         return try {
             newRecognizer = Recognizer(currentModel, SAMPLE_RATE, GRAMMAR)
