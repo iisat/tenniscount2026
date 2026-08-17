@@ -160,7 +160,13 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             applyVoiceCommand(command, text)
         }
 
-        override fun onError(message: String) = Unit
+        override fun onError(message: String) {
+            // Асинхронная ошибка Vosk/AudioRecord после успешного старта:
+            // гасим foreground service и keepAlive, иначе они «зависнут»
+            // при MicState.ERROR.
+            Log.w(TAG, "recognition: асинхронная ошибка — останавливаем прослушивание")
+            stopListening()
+        }
     }
 
     init {
@@ -362,7 +368,10 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
         // Foreground service поднимается ДО старта микрофона: иначе Android 12+
         // не даст доступ к микрофону при уходе приложения в фон.
-        _uiState.update { it.copy(warning = null) }
+        // PREPARING выставляем синхронно, чтобы повторное нажатие «Слушать»
+        // не запустило второй controller.start() (toggleListening игнорирует
+        // нажатия в DOWNLOADING/PREPARING).
+        _uiState.update { it.copy(warning = null, micState = MicState.PREPARING) }
         ContextCompat.startForegroundService(
             context,
             ListeningService.startIntent(context, currentScoreText()),
