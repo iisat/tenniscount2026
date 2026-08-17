@@ -105,7 +105,7 @@ Android-приложение, которое ведёт счёт теннисн�
 - **Kotlin + Jetpack Compose** (BOM), Material 3
 - **Сборка:** Gradle (Kotlin DSL), version catalog (`libs.versions.toml`)
 - **DI:** без фреймворка на старте (ручное внедрение); при росте — Hilt
-- **ASR:** Vosk Android (`com.alphacephei:vosk-android`), русская small-модель, скачивается при первом запуске
+- **ASR:** Vosk Android (`com.alphacephei:vosk-android`), русская small-модель поставляется в APK (assets/model-ru/, версия и SHA-256 зафиксированы в `app/build.gradle.kts`), при первом запуске копируется во внутреннее хранилище; сеть не используется
 - **БД:** Room (история матчей)
 - **Тесты:** JUnit для ядра счёта и парсера
 - **Модули:** один app-модуль с пакетами `ui/`, `score/`, `speech/`, `service/`, `data/` (многомодульность — при необходимости)
@@ -115,8 +115,8 @@ Android-приложение, которое ведёт счёт теннисн�
 - [x] Задание согласовано и зафиксировано в этом файле
 - [x] M1 — Ядро счёта: модель правил + unit-тесты (23 теста, `gradlew :app:testDebugUnitTest`)
 - [x] M2 — UI: экраны настройки и табло с ручным вводом счёта (Compose, тёмная тема, `gradlew :app:assembleDebug`)
-- [x] M3 — Распознавание: Vosk офлайн (русская small-модель, загрузка при первом
-  запуске), ограниченная грамматика, парсер счёта `speech/ScoreParser.kt` (+12 unit-тестов),
+- [x] M3 — Распознавание: Vosk офлайн (русская small-модель bundled в APK,
+  установка из assets при первом запуске), ограниченная грамматика, парсер счёта `speech/ScoreParser.kt` (+12 unit-тестов),
   интеграция в MatchViewModel, beep-подтверждение, индикатор микрофона на табло.
   ⚠ Точность распознавания не проверена на реальном устройстве.
 - [x] M4 — Сервис и надёжность: foreground service `service/ListeningService.kt`

@@ -1,94 +1,89 @@
 package com.tenniscount.app.speech
 
+import android.content.Context
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URI
-import java.util.zip.ZipInputStream
+import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Управляет офлайн-моделью распознавания Vosk: проверяет наличие,
- * при первом запуске скачивает (~45 МБ) и распаковывает во внутреннее хранилище.
- * После установки модели сеть не используется — распознавание полностью офлайн.
+ * Управляет офлайн-моделью распознавания Vosk, поставляемой внутри APK
+ * (assets/model-ru/, версия [MODEL_VERSION] зафиксирована в app/build.gradle.kts).
+ * Vosk работает с обычными файлами, поэтому при первом запуске модель
+ * копируется из assets во внутреннее хранилище. Сеть не используется вообще.
+ *
+ * Установка атомарна: файлы сначала копируются в staging-каталог, и только
+ * после полного успешного копирования тот переименовывается в [modelDir],
+ * а маркер готовности записывается последним. При любой ошибке staging
+ * удаляется целиком, а повторный запуск начинает установку заново.
  */
-class ModelManager(private val filesDir: File) {
+class ModelManager(
+    private val filesDir: File,
+    private val listAssets: (String) -> List<String>,
+    private val openAsset: (String) -> InputStream,
+) {
+
+    constructor(context: Context) : this(
+        context.applicationContext.filesDir,
+        { path -> context.assets.list(path)?.toList().orEmpty() },
+        context.assets::open,
+    )
 
     val modelDir = File(filesDir, MODEL_DIR)
-    private val readyMarker = File(modelDir, ".ready")
+    private val stagingDir = File(filesDir, "$MODEL_DIR.staging")
+    private val readyMarker = File(modelDir, READY_MARKER)
 
-    fun isModelReady(): Boolean = readyMarker.exists()
+    /**
+     * true только если модель установлена полностью и её версия актуальна.
+     * Незавершённая установка (каталог есть, маркера нет) не считается готовой.
+     */
+    fun isModelReady(): Boolean =
+        readyMarker.isFile && runCatching { readyMarker.readText() }.getOrNull() == MODEL_VERSION
 
     fun modelPath(): String = modelDir.absolutePath
 
     /**
-     * Гарантирует наличие модели. [onProgress] получает процент загрузки 0..100
-     * (или null, если сервер не сообщил размер). Бросает исключение при ошибке сети/ФС.
+     * Гарантирует наличие актуальной модели, при необходимости копируя её
+     * из assets. [onProgress] получает процент установки 1..100.
+     * Бросает исключение при ошибке ФС или отсутствии модели в APK.
      */
     suspend fun ensureModel(onProgress: (Int?) -> Unit): Unit = withContext(Dispatchers.IO) {
         if (isModelReady()) return@withContext
 
-        val zipFile = File(filesDir, "$MODEL_DIR.zip")
-        val stagingDir = File(filesDir, "$MODEL_DIR.staging")
+        // Незавершённая или устаревшая установка и прошлый staging — начинаем заново.
+        modelDir.deleteRecursively()
+        stagingDir.deleteRecursively()
         try {
-            download(zipFile, onProgress)
-            stagingDir.deleteRecursively()
-            unzip(zipFile, stagingDir)
-            modelDir.deleteRecursively()
+            val files = collectAssetFiles(ASSET_MODEL_DIR)
+            check(files.isNotEmpty()) { "В APK отсутствует модель ($ASSET_MODEL_DIR)" }
+            files.forEachIndexed { index, assetPath ->
+                val out = File(stagingDir, assetPath.removePrefix("$ASSET_MODEL_DIR/"))
+                out.parentFile?.mkdirs()
+                openAsset(assetPath).use { input ->
+                    out.outputStream().use { input.copyTo(it) }
+                }
+                onProgress((index + 1) * 100 / files.size)
+            }
             check(stagingDir.renameTo(modelDir)) { "Не удалось установить модель" }
-            readyMarker.writeText("ok")
+            readyMarker.writeText(MODEL_VERSION)
         } finally {
-            zipFile.delete()
             stagingDir.deleteRecursively()
         }
     }
 
-    private fun download(target: File, onProgress: (Int?) -> Unit) {
-        val connection = URI(MODEL_URL).toURL().openConnection() as HttpURLConnection
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 30_000
-        try {
-            val total = connection.contentLengthLong.takeIf { it > 0 }
-            connection.inputStream.use { input ->
-                target.outputStream().use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    var downloaded = 0L
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        downloaded += read
-                        onProgress(total?.let { (downloaded * 100 / it).toInt() })
-                    }
-                }
-            }
-        } finally {
-            connection.disconnect()
-        }
-    }
-
-    /** Распаковывает zip, срезая верхнеуровневую папку архива, в [targetDir]. */
-    private fun unzip(zipFile: File, targetDir: File) {
-        ZipInputStream(zipFile.inputStream().buffered()).use { zip ->
-            while (true) {
-                val entry = zip.nextEntry ?: break
-                val relative = entry.name.substringAfter('/', missingDelimiterValue = "")
-                if (relative.isEmpty()) continue
-                val outFile = File(targetDir, relative)
-                if (entry.isDirectory) {
-                    outFile.mkdirs()
-                } else {
-                    outFile.parentFile?.mkdirs()
-                    outFile.outputStream().use { zip.copyTo(it) }
-                }
-                zip.closeEntry()
-            }
-        }
+    /** Рекурсивный список файлов в дереве assets (list() не спускается в подкаталоги). */
+    private fun collectAssetFiles(path: String): List<String> {
+        val children = listAssets(path)
+        if (children.isEmpty()) return listOf(path)
+        return children.flatMap { collectAssetFiles("$path/$it") }
     }
 
     companion object {
         private const val MODEL_DIR = "model-ru"
-        private const val MODEL_URL =
-            "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip"
+        private const val ASSET_MODEL_DIR = "model-ru"
+        private const val READY_MARKER = ".ready"
+
+        /** Версия bundled-модели; должна совпадать с voskModelVersion в app/build.gradle.kts. */
+        const val MODEL_VERSION = "vosk-model-small-ru-0.22"
     }
 }

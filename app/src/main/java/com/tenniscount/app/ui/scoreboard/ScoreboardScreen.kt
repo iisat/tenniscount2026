@@ -260,7 +260,7 @@ private fun MicControl(state: MatchUiState, viewModel: MatchViewModel) {
     }.toTypedArray()
 
     val listening = state.micState == MicState.LISTENING
-    val busy = state.micState == MicState.DOWNLOADING || state.micState == MicState.PREPARING
+    val busy = state.micState == MicState.INSTALLING || state.micState == MicState.PREPARING
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
@@ -412,8 +412,8 @@ private fun SpeechToggle(
 @Composable
 private fun micStatusText(state: MatchUiState): String = when (state.micState) {
     MicState.OFF -> ""
-    MicState.DOWNLOADING -> state.downloadProgress
-        ?.let { stringResource(R.string.model_downloading, it) }
+    MicState.INSTALLING -> state.installProgress
+        ?.let { stringResource(R.string.model_installing, it) }
         ?: stringResource(R.string.mic_preparing)
     MicState.PREPARING -> stringResource(R.string.mic_preparing)
     MicState.LISTENING -> stringResource(R.string.mic_listening)

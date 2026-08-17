@@ -25,7 +25,7 @@
     <string name="listen_stop">Стоп</string>
     <string name="mic_listening">Слушаю…</string>
     <string name="mic_preparing">Подготовка модели…</string>
-    <string name="model_downloading">Загрузка модели: %1$d%%</string>
+    <string name="model_installing">Установка модели: %1$d%%</string>
     <string name="mic_error">Ошибка: %1$s</string>
     <string name="heard_prefix">Слышу: %1$s</string>
     <string name="signal_volume">Громкость сигналов</string>

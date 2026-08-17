@@ -11,13 +11,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import java.util.concurrent.atomic.AtomicInteger
 
-enum class MicState { OFF, DOWNLOADING, PREPARING, LISTENING, ERROR }
+enum class MicState { OFF, INSTALLING, PREPARING, LISTENING, ERROR }
 
 /** Состояние прослушивания, общее для UI и foreground-сервиса. */
 data class ListeningState(
     val micState: MicState = MicState.OFF,
     val error: String? = null,
-    val downloadProgress: Int? = null,
+    val installProgress: Int? = null,
     val lastHeard: String = "",
 )
 
@@ -30,7 +30,7 @@ data class ListeningState(
  */
 class ListeningController private constructor(context: Context) {
 
-    private val modelManager = ModelManager(context.applicationContext.filesDir)
+    private val modelManager = ModelManager(context)
 
     private val _state = MutableStateFlow(ListeningState())
     val state: StateFlow<ListeningState> = _state.asStateFlow()
@@ -76,8 +76,8 @@ class ListeningController private constructor(context: Context) {
     private val startGeneration = AtomicInteger(0)
 
     /**
-     * Полный запуск: при необходимости скачивает модель, загружает её
-     * и начинает прослушивание. Вызывать после проверки разрешения
+     * Полный запуск: при необходимости устанавливает bundled-модель из assets,
+     * загружает её и начинает прослушивание. Вызывать после проверки разрешения
      * RECORD_AUDIO и запуска foreground service (иначе Android 12+ не даст
      * доступ к микрофону из фона). Параллельный повторный вызов, пока идёт
      * запуск, — no-op, возвращает true (запуском владеет первый вызов).
@@ -95,13 +95,13 @@ class ListeningController private constructor(context: Context) {
             _state.update { it.copy(error = null) }
             return try {
                 if (!modelManager.isModelReady()) {
-                    _state.update { it.copy(micState = MicState.DOWNLOADING) }
+                    _state.update { it.copy(micState = MicState.INSTALLING) }
                     modelManager.ensureModel { progress ->
-                        _state.update { it.copy(downloadProgress = progress) }
+                        _state.update { it.copy(installProgress = progress) }
                     }
-                    _state.update { it.copy(downloadProgress = null) }
+                    _state.update { it.copy(installProgress = null) }
                 }
-                if (isCancelled(generation, "после загрузки модели")) return false
+                if (isCancelled(generation, "после установки модели")) return false
                 _state.update { it.copy(micState = MicState.PREPARING) }
                 recognizer.prepare()
                 if (isCancelled(generation, "после подготовки")) return false
@@ -119,7 +119,7 @@ class ListeningController private constructor(context: Context) {
                 _state.update {
                     it.copy(
                         micState = MicState.ERROR,
-                        downloadProgress = null,
+                        installProgress = null,
                         error = e.message ?: "Ошибка подготовки распознавания",
                     )
                 }

@@ -26,8 +26,13 @@
   `MatchSummary.kt`, `ScoreSpeech.kt` (фразы TTS), `MatchStateCodec.kt`
   (сериализация состояния матча в строку для SharedPreferences).
 - Распознавание речи: `app/src/main/java/com/tenniscount/app/speech/` —
-  `ScoreParser.kt` (чистый Kotlin, unit-тесты), `ModelManager.kt` (скачивание русской
-  small-модели Vosk ~45 МБ при первом запуске), `VoskRecognizer.kt` (обёртка над Vosk,
+  `ScoreParser.kt` (чистый Kotlin, unit-тесты), `ModelManager.kt` (bundled русская
+  small-модель Vosk ~45 МБ: поставляется в APK как `assets/model-ru/`, версия и SHA-256
+  архива зафиксированы в `app/build.gradle.kts` — там же задачи `downloadVoskModel`/
+  `unpackVoskModel`, скачивающие модель при сборке; при первом запуске приложение
+  атомарно копирует модель из assets во внутреннее хранилище через staging-каталог,
+  сети нет вообще; attribution Apache 2.0 — `app/src/main/assets/vosk-model-NOTICE.txt`),
+  `VoskRecognizer.kt` (обёртка над Vosk,
   грамматика ограничена словами счёта: ноль/нуль/пятнадцать/тридцать/сорок/ровно/больше/
   меньше/гейм/сет/сколько/отмена/отмени + `[unk]`; слова «счёт» в грамматике нет —
   запрос счёта это «сколько»).
@@ -51,9 +56,11 @@
   коммита использовать несколько флагов `git commit -m ... -m ...`.
 - ASR: Vosk `com.alphacephei:vosk-android:0.3.75` (Maven Central) — версия с нативными
   библиотеками, выровненными под 16 KB страницы (требование Google Play). Разрешения
-  RECORD_AUDIO (runtime-запрос на табло) и INTERNET (только для загрузки модели) — в манифесте.
-  Также FOREGROUND_SERVICE + FOREGROUND_SERVICE_MICROPHONE (сервис прослушивания) и
-  POST_NOTIFICATIONS (runtime-запрос вместе с RECORD_AUDIO на Android 13+).
+  RECORD_AUDIO (runtime-запрос на табло), FOREGROUND_SERVICE +
+  FOREGROUND_SERVICE_MICROPHONE (сервис прослушивания) и POST_NOTIFICATIONS
+  (runtime-запрос вместе с RECORD_AUDIO на Android 13+) — в манифесте.
+  Разрешения INTERNET нет: модель bundled в APK, приложение полностью офлайн.
+  Первая сборка скачивает модель (~45 МБ) в `app/build/vosk-model/` — нужна сеть.
 - БД: Room 2.6.1 через KSP (`com.google.devtools.ksp` 2.0.21-1.0.28) — версии в `libs.versions.toml`.
 - Настройки и персист: SharedPreferences `settings` (в `MatchViewModel`) — имена игроков,
   первый подающий, громкость сигналов (относительная, 1.0–2.0), тумблеры TTS-озвучки,

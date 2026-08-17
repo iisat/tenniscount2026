@@ -61,7 +61,7 @@ data class MatchUiState(
     val log: List<String> = emptyList(),
     val micState: MicState = MicState.OFF,
     val micError: String? = null,
-    val downloadProgress: Int? = null,
+    val installProgress: Int? = null,
     /** Последняя услышанная фраза (частичный или финальный результат). */
     val lastHeard: String = "",
     /** Предупреждение о противоречии объявления текущему счёту. */
@@ -225,7 +225,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                     it.copy(
                         micState = ls.micState,
                         micError = ls.error,
-                        downloadProgress = ls.downloadProgress,
+                        installProgress = ls.installProgress,
                         lastHeard = ls.lastHeard,
                     )
                 }
@@ -349,8 +349,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         when (_uiState.value.micState) {
             MicState.OFF, MicState.ERROR -> startListening()
             MicState.LISTENING -> stopListening()
-            // Идёт загрузка/подготовка модели — повторное нажатие игнорируем.
-            MicState.DOWNLOADING, MicState.PREPARING -> Unit
+            // Идёт установка/подготовка модели — повторное нажатие игнорируем.
+            MicState.INSTALLING, MicState.PREPARING -> Unit
         }
     }
 
@@ -370,7 +370,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         // не даст доступ к микрофону при уходе приложения в фон.
         // PREPARING выставляем синхронно, чтобы повторное нажатие «Слушать»
         // не запустило второй controller.start() (toggleListening игнорирует
-        // нажатия в DOWNLOADING/PREPARING).
+        // нажатия в INSTALLING/PREPARING).
         _uiState.update { it.copy(warning = null, micState = MicState.PREPARING) }
         ContextCompat.startForegroundService(
             context,
