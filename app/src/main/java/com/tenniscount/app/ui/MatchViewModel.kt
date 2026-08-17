@@ -134,6 +134,12 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     /** Счётчик активных объявлений: фокус держим, пока звучит хоть одно. */
     private var duckCount = 0
 
+    /** Число произносимых в данный момент фраз TTS (для watchdog). */
+    private var activeSpeechCount = 0
+
+    /** Watchdog, принудительно сбрасывающий ducking, если колбэки TTS не пришли. */
+    private var duckWatchdogJob: kotlinx.coroutines.Job? = null
+
     /** Завершённые матчи (история), новые сверху. */
     val history: StateFlow<List<FinishedMatchEntity>> = db.matchDao().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -159,9 +165,13 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         runCatching {
-            TextToSpeech(getApplication()) { status ->
+            // Колбэк OnInitListener может сработать ДО того, как конструктор вернёт
+            // объект и мы сохраним его в поле tts. Используем локальную переменную,
+            // чтобы гарантированно настроить движок и повесить UtteranceProgressListener.
+            var newTts: TextToSpeech? = null
+            newTts = TextToSpeech(getApplication()) { status ->
                 if (status != TextToSpeech.SUCCESS) return@TextToSpeech
-                tts?.let { t ->
+                newTts?.let { t ->
                     t.setAudioAttributes(
                         AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -169,15 +179,21 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                     )
                     Log.d(TAG, "tts: setLanguage(ru)=${t.setLanguage(Locale("ru"))}")
                     t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                        override fun onStart(utteranceId: String?) = Unit
-                        override fun onDone(utteranceId: String?) = releaseDuck()
+                        override fun onStart(utteranceId: String?) {
+                            activeSpeechCount++
+                            cancelDuckWatchdog()
+                        }
+
+                        override fun onDone(utteranceId: String?) = onSpeechFinished()
                         override fun onStop(utteranceId: String?, interrupted: Boolean) =
-                            releaseDuck()
+                            onSpeechFinished()
+
                         @Deprecated("onError(String, Int) делегирует сюда")
-                        override fun onError(utteranceId: String?) = releaseDuck()
+                        override fun onError(utteranceId: String?) = onSpeechFinished()
                     })
                 }
-            }.also { tts = it }
+            }
+            tts = newTts
         }.onFailure { Log.w(TAG, "tts: недоступен", it) }
 
         restoreSavedMatch()
@@ -506,14 +522,50 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             Log.d(TAG, "duck: запрос фокуса (приглушение музыки)")
             audioManager.requestAudioFocus(duckFocusRequest)
         }
+        restartDuckWatchdog()
     }
 
     private fun releaseDuck() {
         if (duckCount == 0) return
         if (--duckCount == 0) {
             Log.d(TAG, "duck: фокус возвращён музыке")
+            cancelDuckWatchdog()
             audioManager.abandonAudioFocusRequest(duckFocusRequest)
+        } else {
+            restartDuckWatchdog()
         }
+    }
+
+    private fun onSpeechFinished() {
+        activeSpeechCount = (activeSpeechCount - 1).coerceAtLeast(0)
+        releaseDuck()
+    }
+
+    private fun forceReleaseDuck() {
+        if (duckCount == 0 && activeSpeechCount == 0) return
+        Log.w(
+            TAG,
+            "duck: принудительный сброс фокуса (duckCount=$duckCount, activeSpeech=$activeSpeechCount)",
+        )
+        duckCount = 0
+        activeSpeechCount = 0
+        cancelDuckWatchdog()
+        audioManager.abandonAudioFocusRequest(duckFocusRequest)
+    }
+
+    private fun restartDuckWatchdog() {
+        cancelDuckWatchdog()
+        duckWatchdogJob = viewModelScope.launch {
+            delay(DUCK_WATCHDOG_MS)
+            if (duckCount > 0 && activeSpeechCount == 0) {
+                forceReleaseDuck()
+            }
+        }
+    }
+
+    private fun cancelDuckWatchdog() {
+        duckWatchdogJob?.cancel()
+        duckWatchdogJob = null
     }
 
     /** Короткий beep — подтверждение, что объявление услышано, не глядя на экран. */
@@ -589,6 +641,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         stopListening()
+        cancelDuckWatchdog()
         audioManager.abandonAudioFocusRequest(duckFocusRequest)
         controller.listener = null
         controller.onPauseToggleRequested = null
@@ -704,5 +757,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_FIRST_SERVER = "first_server"
         const val KEY_MATCH_STATE = "current_match_state"
         const val KEY_MATCH_LOG = "current_match_log"
+
+        /** Таймаут watchdog: если фокус удерживается без активной TTS-озвучки, сбрасываем. */
+        const val DUCK_WATCHDOG_MS = 10_000L
     }
 }

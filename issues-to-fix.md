@@ -45,7 +45,7 @@
   (opus #2)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\speech\VoskRecognizer.kt" lines="52-74" />
 
-- [ ] **4. Гонка при инициализации TTS → навсегда приглушённая музыка**
+- [x] **4. Гонка при инициализации TTS → навсегда приглушённая музыка**
   Колбэк `TextToSpeech(...) { status -> ... }` обращается к полю `tts`, которое
   присваивается только после возврата конструктора — гонка без гарантий. При
   проигрыше гонки `UtteranceProgressListener` не устанавливается,
