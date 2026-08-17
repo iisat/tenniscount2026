@@ -34,7 +34,7 @@
   (devin P1)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\score\MatchEngine.kt" lines="136-163" />
 
-- [ ] **3. Утечка нативной памяти при каждом старт/стоп распознавания**
+- [x] **3. Утечка нативной памяти при каждом старт/стоп распознавания**
   `Recognizer` (нативный, `AutoCloseable`) создаётся в `VoskRecognizer`, но нигде не
   закрывается — `SpeechService.shutdown()` его не освобождает. Каждый цикл
   «Слушать → Стоп» (а также пауза/возобновление матча, перезапуск после ошибки)

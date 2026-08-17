@@ -35,6 +35,7 @@ class VoskRecognizer(
 
     private var model: Model? = null
     private var speechService: SpeechService? = null
+    private var recognizer: Recognizer? = null
     private var finalDelivered = false
 
     /** Загружает модель в память. Блокирующая операция — выполняется в IO-потоке. */
@@ -48,13 +49,16 @@ class VoskRecognizer(
     /** Начинает прослушивание. Возвращает false при ошибке запуска микрофона. */
     fun start(): Boolean {
         val currentModel = model ?: return false
+        var newRecognizer: Recognizer? = null
         return try {
-            val recognizer = Recognizer(currentModel, SAMPLE_RATE, GRAMMAR)
-            val service = SpeechService(recognizer, SAMPLE_RATE)
+            newRecognizer = Recognizer(currentModel, SAMPLE_RATE, GRAMMAR)
+            val service = SpeechService(newRecognizer, SAMPLE_RATE)
             service.startListening(this)
             speechService = service
+            recognizer = newRecognizer
             true
         } catch (e: Exception) {
+            newRecognizer?.close()
             listener.onError(e.message ?: "Не удалось запустить микрофон")
             false
         }
@@ -71,6 +75,8 @@ class VoskRecognizer(
             it.shutdown()
         }
         speechService = null
+        recognizer?.close()
+        recognizer = null
     }
 
     fun release() {
