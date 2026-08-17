@@ -14,6 +14,4 @@ data class FinishedMatchEntity(
     val setsP2: Int,
     /** Счёт по сетам: «6:4 3:6 (2:1)». */
     val setsSummary: String,
-    /** Лог объявлений и изменений счёта, по одной записи на строку. */
-    val log: String,
 )

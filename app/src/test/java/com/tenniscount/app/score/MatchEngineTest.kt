@@ -384,17 +384,16 @@ class MatchEngineTest {
     }
 
     @Test
-    fun `restore sets state and log, undo history is cleared`() {
+    fun `restore sets state, log and undo history are cleared`() {
         val engine = MatchEngine(firstServer = Player.ONE)
         engine.addPoint(Player.ONE)
         val saved = engine.state
-        val savedLog = engine.log
 
         val restored = MatchEngine(firstServer = Player.TWO)
-        restored.restore(saved, savedLog)
+        restored.restore(saved)
 
         assertEquals(saved, restored.state)
-        assertEquals(savedLog, restored.log)
+        assertTrue(restored.log.isEmpty()) // лог не персистится и не восстанавливается
         assertFalse(restored.canUndo) // история отмены не переживает восстановление
 
         // Новые действия после восстановления работают и отменяются.
@@ -411,5 +410,16 @@ class MatchEngineTest {
         engine.applyAnnouncement(Announcement.Points(1, 1))
         engine.undo()
         assertEquals(3, engine.log.size)
+    }
+
+    @Test
+    fun `log is bounded by MAX_LOG_ENTRIES`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        repeat(MatchEngine.MAX_LOG_ENTRIES + 50) { engine.logNote("событие $it") }
+
+        assertEquals(MatchEngine.MAX_LOG_ENTRIES, engine.log.size)
+        // Остались самые свежие записи.
+        assertEquals("событие 149", engine.log.last())
+        assertEquals("событие 50", engine.log.first())
     }
 }

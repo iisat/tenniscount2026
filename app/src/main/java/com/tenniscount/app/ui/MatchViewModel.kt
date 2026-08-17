@@ -294,7 +294,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val s = _uiState.value
         stopListening()
         if (state != null) {
-            saveMatch(state, s.player1Name, s.player2Name, s.log)
+            saveMatch(state, s.player1Name, s.player2Name)
         }
         // Матч завершён — сохранённый слепок больше не нужен.
         clearPersistedMatch()
@@ -334,7 +334,6 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         state: MatchState,
         player1Name: String,
         player2Name: String,
-        log: List<String>,
     ) {
         val entity = FinishedMatchEntity(
             finishedAt = System.currentTimeMillis(),
@@ -343,7 +342,6 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             setsP1 = MatchSummary.setsWon(state, Player.ONE),
             setsP2 = MatchSummary.setsWon(state, Player.TWO),
             setsSummary = MatchSummary.setsSummary(state),
-            log = log.joinToString("\n"),
         )
         viewModelScope.launch(Dispatchers.IO) { db.matchDao().insert(entity) }
     }
@@ -727,14 +725,13 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val e = engine ?: return
         prefs.edit {
             putString(KEY_MATCH_STATE, MatchStateCodec.encode(e.state))
-            putString(KEY_MATCH_LOG, e.log.joinToString("\n"))
         }
     }
 
     private fun clearPersistedMatch() {
         prefs.edit {
             remove(KEY_MATCH_STATE)
-            remove(KEY_MATCH_LOG)
+            remove(KEY_MATCH_LOG) // legacy-ключ, больше не пишется
         }
     }
 
@@ -742,17 +739,15 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private fun restoreSavedMatch() {
         val saved = prefs.getString(KEY_MATCH_STATE, null) ?: return
         val state = MatchStateCodec.decode(saved) ?: return
-        val log = prefs.getString(KEY_MATCH_LOG, "").orEmpty()
-            .split("\n").filter { it.isNotEmpty() }
         engine = MatchEngine(state.firstServer).apply {
             strictValidation = _uiState.value.strictValidation
-            restore(state, log)
+            restore(state)
         }
         // Сигналы о переходах сравнивают с lastSyncedState: восстановленное
         // состояние не должно вызывать звонок гейма/сета при первом sync().
         lastSyncedState = state
         _uiState.update {
-            it.copy(screen = Screen.SCOREBOARD, matchState = state, log = log)
+            it.copy(screen = Screen.SCOREBOARD, matchState = state)
         }
     }
 

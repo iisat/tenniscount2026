@@ -67,9 +67,13 @@ class MatchEngine(firstServer: Player) {
     private data class UndoEntry(val state: MatchState, val source: ChangeSource)
 
     private val undoStack = ArrayDeque<UndoEntry>()
-    private val _log = mutableListOf<String>()
+    private val _log = ArrayDeque<String>()
 
-    /** Лог объявлений и изменений счёта (для экрана истории). */
+    /**
+     * Лог объявлений и изменений счёта для показа на табло. Живёт только в
+     * памяти и ограничен последними [MAX_LOG_ENTRIES] записями — за матч с
+     * непрерывным распознаванием набираются тысячи строк.
+     */
     val log: List<String>
         get() = _log.toList()
 
@@ -88,19 +92,18 @@ class MatchEngine(firstServer: Player) {
 
     /** Запись в лог без изменения состояния (диагностика распознавания и т.п.). */
     fun logNote(entry: String) {
-        _log += entry
+        addLog(entry)
     }
 
     /**
      * Восстанавливает сохранённое состояние (незавершённый матч между запусками
-     * приложения). История отмены не сохраняется: undo доступен только для
-     * действий после восстановления.
+     * приложения). История отмены и лог не сохраняются: undo доступен только для
+     * действий после восстановления, лог на табло начинается пустым.
      */
-    fun restore(state: MatchState, log: List<String>) {
+    fun restore(state: MatchState) {
         undoStack.clear()
         this.state = state
         _log.clear()
-        _log.addAll(log)
     }
 
     /**
@@ -111,7 +114,7 @@ class MatchEngine(firstServer: Player) {
     fun undo(): ChangeSource? {
         val entry = undoStack.removeLastOrNull() ?: return null
         state = entry.state
-        _log += "Отмена последнего действия"
+        addLog("Отмена последнего действия")
         return entry.source
     }
 
@@ -227,7 +230,12 @@ class MatchEngine(firstServer: Player) {
     ) {
         undoStack.addLast(UndoEntry(state, source))
         state = newState
-        _log += logEntry
+        addLog(logEntry)
+    }
+
+    private fun addLog(entry: String) {
+        _log.addLast(entry)
+        while (_log.size > MAX_LOG_ENTRIES) _log.removeFirst()
     }
 
     /** Истинное преимущество (не путать с 40:30). */
@@ -241,5 +249,10 @@ class MatchEngine(firstServer: Player) {
         1 -> "15"
         2 -> "30"
         else -> "40"
+    }
+
+    companion object {
+        /** Лог хранит только последние записи — этого хватает для табло. */
+        const val MAX_LOG_ENTRIES = 100
     }
 }

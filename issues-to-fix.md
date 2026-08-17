@@ -141,14 +141,21 @@
   (opus #8)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="659-682" />
 
-- [ ] **10. Полный лог матча пишется в SharedPreferences на каждое событие**
+- [x] **10. Полный лог матча пишется в SharedPreferences на каждое событие**
   `persistCurrentMatch()` вызывается из каждого `sync()` (в т.ч. на нераспознанные
   фразы) и перезаписывает весь лог целиком; лог не ограничен по длине, а
   `MatchEngine.log` делает полную копию списка при каждом обращении. За длинный матч
   с непрерывным распознаванием — тысячи строк и сотни перезаписей XML-файла настроек.
-  Исправление: разнести хранилища (настройки — prefs/DataStore, состояние матча и
-  лог — Room), ограничить лог кольцевым буфером, не копировать список на каждое
-  обращение.
+  Исправлено: лог больше не персистится вообще. В `MatchEngine` он ограничен
+  кольцевым буфером последних 100 записей (`MAX_LOG_ENTRIES`) и живёт только в
+  памяти — для `LogView` на табло; `restore()` больше не принимает лог, при рестарте
+  матча табло начинается с пустым логом. В SharedPreferences пишется только состояние
+  матча (legacy-ключ `current_match_log` подчищается в `clearPersistedMatch`).
+  Колонка `log` удалена из `FinishedMatchEntity` — в истории она нигде не
+  отображалась; версия БД поднята до 2 с `fallbackToDestructiveMigration`
+  (история пересоздаётся при обновлении, потеря допустима). Покрыто тестами
+  `log is bounded by MAX_LOG_ENTRIES` и `restore sets state, log and undo history
+  are cleared`.
   (opus #9, devin P3)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="621-627" />
 

@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [FinishedMatchEntity::class], version = 1)
+@Database(entities = [FinishedMatchEntity::class], version = 2)
 abstract class MatchDatabase : RoomDatabase() {
 
     abstract fun matchDao(): MatchDao
@@ -19,7 +19,11 @@ abstract class MatchDatabase : RoomDatabase() {
                 context.applicationContext,
                 MatchDatabase::class.java,
                 "tenniscount.db",
-            ).build().also { instance = it }
+            )
+                // v1 → v2 удаляет колонку log: история — некритичные данные,
+                // проще пересоздать таблицу, чем тащить миграцию.
+                .fallbackToDestructiveMigration()
+                .build().also { instance = it }
         }
     }
 }
