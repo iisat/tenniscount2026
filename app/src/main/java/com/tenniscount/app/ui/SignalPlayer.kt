@@ -10,14 +10,21 @@ import kotlin.math.sin
 import kotlin.math.tanh
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
  * Короткие сигналы подтверждения/отказа. Тоны синтезируются (синус, PCM)
  * и играются через AudioTrack на медиа-канале — в отличие от ToneGenerator,
  * громкость не ограничена 100% (усиление до 250% для игры поверх музыки).
+ *
+ * Пока включён [setKeepAlive], тракт держится «тёплым» непрерывной тишиной:
+ * иначе на холодном старте (сон DSP, приостановленный A2DP) открытие пути
+ * занимает десятки-сотни миллисекунд и съедает короткий сигнал целиком.
  */
 object SignalPlayer {
 
@@ -27,6 +34,46 @@ object SignalPlayer {
     private const val BASE_AMPLITUDE = 0.6
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    private var keepAliveJob: Job? = null
+
+    /**
+     * Держит аудиотракт открытым потоком тишины, чтобы последующие сигналы
+     * звучали с первого семпла. Включать на время прослушивания микрофона.
+     */
+    @Synchronized
+    fun setKeepAlive(enabled: Boolean) {
+        if (enabled == (keepAliveJob != null)) return
+        keepAliveJob?.cancel()
+        keepAliveJob = if (enabled) scope.launch { runKeepAlive() } else null
+    }
+
+    private suspend fun runKeepAlive() {
+        runCatching {
+            // 100 мс тишины; блокирующий write сам задаёт темп цикла.
+            val chunk = ShortArray(SAMPLE_RATE / 10)
+            val track = buildTrack(
+                bufferBytes = maxOf(
+                    chunk.size * 2,
+                    AudioTrack.getMinBufferSize(
+                        SAMPLE_RATE,
+                        AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                    ),
+                ),
+                transferMode = AudioTrack.MODE_STREAM,
+            )
+            try {
+                track.play()
+                while (currentCoroutineContext().isActive) {
+                    if (track.write(chunk, 0, chunk.size) <= 0) break
+                }
+            } finally {
+                runCatching { track.stop() }
+                track.release()
+            }
+        }
+    }
 
     /** Команда принята: короткий высокий beep. */
     fun accept(volume: Float) = play(listOf(880 to 150), volume)
@@ -38,31 +85,36 @@ object SignalPlayer {
     private fun play(segments: List<Pair<Int, Int>>, volume: Float) {
         scope.launch {
             runCatching {
-                // Тишина в начале: аппаратный микшер срезает первые миллисекунды тона.
-                val samples = synthesize(listOf(0 to 25) + segments, volume)
-                val track = AudioTrack.Builder()
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .build(),
-                    )
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setSampleRate(SAMPLE_RATE)
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                            .build(),
-                    )
-                    .setBufferSizeInBytes(samples.size * 2)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .build()
+                // Тишина в начале: на случай холодного тракта (keep-alive выключен)
+                // микшер срезает первые миллисекунды, пока открывает путь вывода.
+                val leadMs = 60
+                val samples = synthesize(listOf(0 to leadMs) + segments, volume)
+                val track = buildTrack(samples.size * 2, AudioTrack.MODE_STATIC)
                 track.write(samples, 0, samples.size)
                 track.play()
-                delay(segments.sumOf { it.second } + 100L)
+                delay(segments.sumOf { it.second } + leadMs + 100L)
                 track.release()
             }
         }
     }
+
+    private fun buildTrack(bufferBytes: Int, transferMode: Int): AudioTrack =
+        AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .build(),
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setSampleRate(SAMPLE_RATE)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build(),
+            )
+            .setBufferSizeInBytes(bufferBytes)
+            .setTransferMode(transferMode)
+            .build()
 
     private fun synthesize(segments: List<Pair<Int, Int>>, volume: Float): ShortArray {
         val totalSamples = segments.sumOf { it.second } * SAMPLE_RATE / 1000

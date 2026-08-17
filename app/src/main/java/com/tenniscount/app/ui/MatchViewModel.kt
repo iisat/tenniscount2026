@@ -288,12 +288,15 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             context,
             ListeningService.startIntent(context, currentScoreText()),
         )
+        // Держим аудиотракт «тёплым», иначе холодный старт съедает короткие сигналы.
+        SignalPlayer.setKeepAlive(true)
         viewModelScope.launch { controller.start() }
     }
 
     fun clearWarning() = _uiState.update { it.copy(warning = null) }
 
     private fun stopListening() {
+        SignalPlayer.setKeepAlive(false)
         controller.stop()
         // stopService, а не ACTION_STOP: колбэк сервиса уже привёл нас сюда,
         // повторный интент зациклит остановку.
