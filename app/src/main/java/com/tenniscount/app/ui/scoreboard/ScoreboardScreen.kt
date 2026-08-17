@@ -43,6 +43,7 @@ import androidx.core.content.ContextCompat
 import com.tenniscount.app.R
 import com.tenniscount.app.score.GameState
 import com.tenniscount.app.score.MatchState
+import com.tenniscount.app.score.MatchSummary
 import com.tenniscount.app.score.Player
 import com.tenniscount.app.ui.MatchUiState
 import com.tenniscount.app.ui.MatchViewModel
@@ -443,16 +444,15 @@ private fun FinishedContent(state: MatchUiState, match: MatchState, viewModel: M
             text = stringResource(R.string.match_finished),
             style = MaterialTheme.typography.headlineLarge,
         )
-        val sets = match.completedSets + match.currentSet.score
         Player.entries.forEach { player ->
             Text(
                 text = state.name(player) + "  —  " +
-                    sets.count { it.winner == player } + " " + stringResource(R.string.sets_label).dropLast(1).lowercase(),
+                    MatchSummary.setsWon(match, player) + " " + stringResource(R.string.sets_label).dropLast(1).lowercase(),
                 style = MaterialTheme.typography.bodyLarge,
             )
         }
         Text(
-            text = sets.joinToString("   ") { it.toString() },
+            text = MatchSummary.setsSummary(match),
             fontSize = 32.sp,
             fontWeight = FontWeight.Bold,
         )

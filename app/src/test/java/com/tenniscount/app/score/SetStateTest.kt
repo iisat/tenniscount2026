@@ -62,4 +62,16 @@ class SetStateTest {
     fun `cannot add point to finished set`() {
         playGames(p1 = 6, p2 = 0).withPoint(Player.ONE)
     }
+
+    @Test
+    fun `SetScore winner is null when games are equal`() {
+        assertNull(SetScore(0, 0).winner)
+        assertNull(SetScore(3, 3).winner)
+    }
+
+    @Test
+    fun `SetScore winner reflects the player with more games`() {
+        assertEquals(Player.ONE, SetScore(6, 4).winner)
+        assertEquals(Player.TWO, SetScore(4, 6).winner)
+    }
 }

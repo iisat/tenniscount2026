@@ -49,7 +49,9 @@ object ScoreSpeech {
 
     /** Итог завершённого сета: «сет, Игрок 1. Шесть четыре» — геймы победителя первыми. */
     fun setEnd(set: SetScore, playerName: (Player) -> String): String {
-        val winner = set.winner
+        // completedSets всегда хранит реально завершённые сеты, поэтому у них
+        // всегда есть победитель (winner == null только для незавершённого сета).
+        val winner = requireNotNull(set.winner) { "Незавершённый сет не может быть объявлен" }
         val winnerGames = if (winner == Player.ONE) set.gamesP1 else set.gamesP2
         val loserGames = if (winner == Player.ONE) set.gamesP2 else set.gamesP1
         return "Сет, ${playerName(winner)}. $winnerGames $loserGames"

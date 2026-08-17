@@ -61,4 +61,20 @@ class MatchSummaryTest {
         assertEquals(2, MatchSummary.setsWon(s, Player.ONE))
         assertEquals(1, MatchSummary.setsWon(s, Player.TWO))
     }
+
+    @Test
+    fun `setsWon не засчитывает только что начатый пустой сет 0-0`() {
+        // 6:4 → выигран первый сет, новый сет ещё не начался (0:0).
+        val s = state(completedSets = listOf(SetScore(6, 4)), gamesP1 = 0, gamesP2 = 0)
+        assertEquals(1, MatchSummary.setsWon(s, Player.ONE))
+        assertEquals(0, MatchSummary.setsWon(s, Player.TWO))
+    }
+
+    @Test
+    fun `setsWon не засчитывает незавершённый сет при ручном завершении матча`() {
+        // 3:2 в текущем сете — матч завершён вручную, сет не доигран.
+        val s = state(gamesP1 = 3, gamesP2 = 2)
+        assertEquals(0, MatchSummary.setsWon(s, Player.ONE))
+        assertEquals(0, MatchSummary.setsWon(s, Player.TWO))
+    }
 }

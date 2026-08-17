@@ -4,8 +4,12 @@ import kotlin.math.abs
 
 /** Итог завершённого сета. */
 data class SetScore(val gamesP1: Int, val gamesP2: Int) {
-    val winner: Player
-        get() = if (gamesP1 > gamesP2) Player.ONE else Player.TWO
+    val winner: Player?
+        get() = when {
+            gamesP1 > gamesP2 -> Player.ONE
+            gamesP2 > gamesP1 -> Player.TWO
+            else -> null
+        }
 
     override fun toString(): String = "$gamesP1:$gamesP2"
 }
