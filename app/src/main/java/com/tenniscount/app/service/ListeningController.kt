@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
+import java.util.concurrent.atomic.AtomicInteger
 
 enum class MicState { OFF, DOWNLOADING, PREPARING, LISTENING, ERROR }
 
@@ -69,9 +70,10 @@ class ListeningController private constructor(context: Context) {
      * Поколение запуска: [stop] инкрементирует его, чем отменяет ещё
      * выполняющийся [start] — тот после каждого долгого шага проверяет,
      * что его поколение актуально, иначе завершается, не запуская микрофон.
+     * AtomicInteger: инкремент не атомарен у обычного Int, а stop() может
+     * прийти не из того потока, где выполняется start().
      */
-    @Volatile
-    private var startGeneration = 0
+    private val startGeneration = AtomicInteger(0)
 
     /**
      * Полный запуск: при необходимости скачивает модель, загружает её
@@ -87,7 +89,7 @@ class ListeningController private constructor(context: Context) {
             Log.i(TAG, "start: запуск уже идёт — пропускаем")
             return true
         }
-        val generation = ++startGeneration
+        val generation = startGeneration.incrementAndGet()
         try {
             Log.i(TAG, "start: запуск прослушивания")
             _state.update { it.copy(error = null) }
@@ -130,7 +132,7 @@ class ListeningController private constructor(context: Context) {
 
     /** true, если за время запуска пришёл [stop] — запуск отменён. */
     private fun isCancelled(generation: Int, stage: String): Boolean {
-        if (generation == startGeneration) return false
+        if (generation == startGeneration.get()) return false
         Log.i(TAG, "start: отменён остановкой $stage")
         return true
     }
@@ -145,7 +147,7 @@ class ListeningController private constructor(context: Context) {
         Log.i(TAG, "stop: прослушивание остановлено")
         // Инвалидируем незавершённый start(): после ближайшей проверки
         // поколения он завершится, не запуская микрофон.
-        startGeneration++
+        startGeneration.incrementAndGet()
         recognizer.stop()
         _state.update { it.copy(micState = MicState.OFF, lastHeard = "") }
     }
