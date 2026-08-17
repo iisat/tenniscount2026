@@ -1,4 +1,6 @@
 import java.net.URI
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
@@ -53,7 +55,9 @@ val downloadVoskModel = tasks.register("downloadVoskModel") {
             check(actual == voskModelSha256) {
                 "SHA-256 модели не совпал: $actual (ожидался $voskModelSha256)"
             }
-            check(tmp.renameTo(file)) { "Не удалось переименовать $tmp в $file" }
+            // Files.move, а не File.renameTo: последний на Windows падает,
+            // если целевой файл уже существует (например, после инвалидации кэша).
+            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
         } finally {
             tmp.delete()
         }
@@ -70,13 +74,20 @@ val unpackVoskModel = tasks.register("unpackVoskModel") {
         val modelRoot = voskModelAssetsDir.get().asFile.resolve("model-ru")
         modelRoot.deleteRecursively()
         modelRoot.mkdirs()
+        // Защита от Zip Slip на будущее: сегодня содержимое архива уже
+        // гарантировано проверкой SHA-256, но при смене модели/хэша
+        // canonical-path проверка не даст записи выйти за пределы model-ru.
+        val root = modelRoot.canonicalFile
         ZipInputStream(voskModelZip.get().asFile.inputStream().buffered()).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 // Срезаем верхнеуровневую папку архива (vosk-model-small-ru-0.22/).
                 val relative = entry.name.substringAfter('/', "")
                 if (relative.isNotEmpty()) {
-                    val target = modelRoot.resolve(relative)
+                    val target = root.resolve(relative).canonicalFile
+                    check(target.path.startsWith(root.path + File.separator)) {
+                        "Небезопасная запись в ZIP: ${entry.name}"
+                    }
                     if (entry.isDirectory) {
                         target.mkdirs()
                     } else {
@@ -100,6 +111,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        // Единственный источник версии bundled-модели — voskModelVersion выше.
+        buildConfigField("String", "VOSK_MODEL_VERSION", "\"$voskModelVersion\"")
     }
 
     buildTypes {
@@ -121,6 +134,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     sourceSets {

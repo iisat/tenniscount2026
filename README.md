@@ -47,7 +47,10 @@ Recognition runs fully offline (Vosk, Russian model) — no internet needed on t
 
 - Kotlin, Jetpack Compose (Material 3, dark theme), MVVM, no DI framework.
 - ASR: Vosk Android (`com.alphacephei:vosk-android:0.3.75`), Russian small model
-  (~45 MB, downloaded on first launch).
+  (~45 MB) bundled into the APK as `assets/model-ru/` — downloaded and unpacked
+  at build time (version and SHA-256 pinned in `app/build.gradle.kts`); on first
+  launch the app just copies it from assets to internal storage. No network at
+  runtime, the app works fully offline including the very first launch.
 - DB: Room (match history). Tests: JUnit (score engine and parser).
 - minSdk 29 (Android 10), targetSdk 36.
 
@@ -65,8 +68,9 @@ Requirements: JDK 17, Android SDK with the android-36 platform (path goes to
 
 - `app/.../score/` — pure Kotlin tennis rules engine (`MatchEngine`, `GameState`,
   `SetState`, `MatchSummary`, `ScoreSpeech`, `MatchStateCodec`), no Android dependencies.
-- `app/.../speech/` — Vosk: model download (`ModelManager`), recognizer
-  (`VoskRecognizer`), announcement parser (`ScoreParser`, pure Kotlin).
+- `app/.../speech/` — Vosk: install of the bundled model from assets
+  (`ModelManager`), recognizer (`VoskRecognizer`), announcement parser
+  (`ScoreParser`, pure Kotlin).
 - `app/.../service/` — listening foreground service (`ListeningService`) and its
   singleton controller (`ListeningController`).
 - `app/.../ui/` — Compose screens (match setup, scoreboard, history), `MatchViewModel`,

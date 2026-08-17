@@ -46,7 +46,11 @@ Android-приложение для автоматического ведени�
 
 - Kotlin, Jetpack Compose (Material 3, тёмная тема), MVVM, без DI-фреймворка.
 - ASR: Vosk Android (`com.alphacephei:vosk-android:0.3.75`), русская small-модель
-  (~45 МБ, скачивается при первом запуске).
+  (~45 МБ) поставляется внутри APK как `assets/model-ru/` — скачивается и
+  распаковывается при сборке (версия и SHA-256 зафиксированы в
+  `app/build.gradle.kts`); при первом запуске приложение лишь копирует её из
+  assets во внутреннее хранилище. Сеть в рантайме не используется, приложение
+  полностью офлайн, включая самый первый запуск.
 - БД: Room (история матчей). Тесты: JUnit (ядро счёта и парсер).
 - minSdk 29 (Android 10), targetSdk 36.
 
@@ -64,8 +68,8 @@ gradlew.bat :app:testDebugUnitTest   :: unit-тесты ядра счёта и �
 
 - `app/.../score/` — чистое Kotlin-ядро правил тенниса (`MatchEngine`, `GameState`,
   `SetState`, `MatchSummary`, `ScoreSpeech`, `MatchStateCodec`), без Android-зависимостей.
-- `app/.../speech/` — Vosk: загрузка модели (`ModelManager`), распознаватель
-  (`VoskRecognizer`), парсер объявлений (`ScoreParser`, чистый Kotlin).
+- `app/.../speech/` — Vosk: установка bundled-модели из assets (`ModelManager`),
+  распознаватель (`VoskRecognizer`), парсер объявлений (`ScoreParser`, чистый Kotlin).
 - `app/.../service/` — foreground service прослушивания (`ListeningService`) и
   синглтон-контроллер (`ListeningController`).
 - `app/.../ui/` — Compose-экраны (настройка матча, табло, история), `MatchViewModel`,

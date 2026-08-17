@@ -1,6 +1,7 @@
 package com.tenniscount.app.speech
 
 import android.content.Context
+import com.tenniscount.app.BuildConfig
 import java.io.File
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
@@ -8,7 +9,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * Управляет офлайн-моделью распознавания Vosk, поставляемой внутри APK
- * (assets/model-ru/, версия [MODEL_VERSION] зафиксирована в app/build.gradle.kts).
+ * (assets/model-ru/, версия зафиксирована как voskModelVersion в
+ * app/build.gradle.kts и попадает сюда через [BuildConfig.VOSK_MODEL_VERSION]).
  * Vosk работает с обычными файлами, поэтому при первом запуске модель
  * копируется из assets во внутреннее хранилище. Сеть не используется вообще.
  *
@@ -83,7 +85,7 @@ class ModelManager(
         private const val ASSET_MODEL_DIR = "model-ru"
         private const val READY_MARKER = ".ready"
 
-        /** Версия bundled-модели; должна совпадать с voskModelVersion в app/build.gradle.kts. */
-        const val MODEL_VERSION = "vosk-model-small-ru-0.22"
+        /** Версия bundled-модели (единственный источник — voskModelVersion в app/build.gradle.kts). */
+        val MODEL_VERSION: String = BuildConfig.VOSK_MODEL_VERSION
     }
 }
