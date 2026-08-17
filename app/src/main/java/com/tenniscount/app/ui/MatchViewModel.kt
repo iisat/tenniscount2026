@@ -165,35 +165,47 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         runCatching {
-            // Колбэк OnInitListener может сработать ДО того, как конструктор вернёт
-            // объект и мы сохраним его в поле tts. Используем локальную переменную,
-            // чтобы гарантированно настроить движок и повесить UtteranceProgressListener.
-            var newTts: TextToSpeech? = null
-            newTts = TextToSpeech(getApplication()) { status ->
-                if (status != TextToSpeech.SUCCESS) return@TextToSpeech
-                newTts?.let { t ->
-                    t.setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .build(),
-                    )
-                    Log.d(TAG, "tts: setLanguage(ru)=${t.setLanguage(Locale("ru"))}")
-                    t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                        override fun onStart(utteranceId: String?) {
-                            activeSpeechCount++
-                            cancelDuckWatchdog()
-                        }
+            // OnInitListener может сработать до того, как конструктор TextToSpeech
+            // вернёт объект. Запоминаем pending-статус и настраиваем движок после
+            // присвоения переменной, чтобы listener был гарантированно установлен.
+            var engine: TextToSpeech? = null
+            var pendingStatus: Int? = null
 
-                        override fun onDone(utteranceId: String?) = onSpeechFinished()
-                        override fun onStop(utteranceId: String?, interrupted: Boolean) =
-                            onSpeechFinished()
+            fun configure(t: TextToSpeech, status: Int) {
+                if (status != TextToSpeech.SUCCESS) return
+                t.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build(),
+                )
+                Log.d(TAG, "tts: setLanguage(ru)=${t.setLanguage(Locale("ru"))}")
+                t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        activeSpeechCount++
+                    }
 
-                        @Deprecated("onError(String, Int) делегирует сюда")
-                        override fun onError(utteranceId: String?) = onSpeechFinished()
-                    })
+                    override fun onDone(utteranceId: String?) = onSpeechFinished()
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) =
+                        onSpeechFinished()
+
+                    @Deprecated("onError(String, Int) делегирует сюда")
+                    override fun onError(utteranceId: String?) = onSpeechFinished()
+                })
+            }
+
+            engine = TextToSpeech(getApplication()) { status ->
+                val readyEngine = engine
+                if (readyEngine != null) {
+                    configure(readyEngine, status)
+                } else {
+                    pendingStatus = status
                 }
             }
-            tts = newTts
+            tts = engine
+
+            pendingStatus?.let { status ->
+                engine?.let { configure(it, status) }
+            }
         }.onFailure { Log.w(TAG, "tts: недоступен", it) }
 
         restoreSavedMatch()
@@ -557,7 +569,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         cancelDuckWatchdog()
         duckWatchdogJob = viewModelScope.launch {
             delay(DUCK_WATCHDOG_MS)
-            if (duckCount > 0 && activeSpeechCount == 0) {
+            if (duckCount > 0) {
                 forceReleaseDuck()
             }
         }
