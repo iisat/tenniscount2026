@@ -49,6 +49,10 @@
 - История матчей: `app/src/main/java/com/tenniscount/app/data/` — Room (KSP),
   сохранение при «Завершить матч», экран `ui/history/`.
 - Тесты: `app/src/test/java/com/tenniscount/app/score/` и `.../speech/`.
+- Логирование: только через `util/AppLog.kt` — `d`/`i` пишутся лишь при
+  `BuildConfig.DEBUG` (распознанная речь/счёт не должны попадать в logcat
+  релизной сборки); `w`/`e` — всегда, но без пользовательского текста.
+  Прямые вызовы `android.util.Log` в main-коде не использовать.
 
 ## Особенности
 

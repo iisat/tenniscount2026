@@ -12,7 +12,6 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
@@ -34,6 +33,7 @@ import com.tenniscount.app.service.MicState
 import com.tenniscount.app.speech.ScoreParser
 import com.tenniscount.app.speech.VoiceCommand
 import com.tenniscount.app.speech.VoskRecognizer
+import com.tenniscount.app.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -168,7 +168,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             // Асинхронная ошибка Vosk/AudioRecord после успешного старта:
             // гасим foreground service и keepAlive, иначе они «зависнут»
             // при MicState.ERROR.
-            Log.w(TAG, "recognition: асинхронная ошибка — останавливаем прослушивание")
+            AppLog.w(TAG, "recognition: асинхронная ошибка — останавливаем прослушивание")
             stopListening()
         }
     }
@@ -188,7 +188,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build(),
                 )
-                Log.d(TAG, "tts: setLanguage(ru)=${t.setLanguage(Locale("ru"))}")
+                AppLog.d(TAG, "tts: setLanguage(ru)=${t.setLanguage(Locale("ru"))}")
                 t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
                         activeSpeechCount++
@@ -216,7 +216,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             pendingStatus?.let { status ->
                 engine?.let { configure(it, status) }
             }
-        }.onFailure { Log.w(TAG, "tts: недоступен", it) }
+        }.onFailure { AppLog.w(TAG, "tts: недоступен", it) }
 
         restoreSavedMatch()
         controller.listener = recognitionListener
@@ -390,7 +390,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             // Если start() отменён пришедшим stop() (контроллер уже в OFF),
             // повторная остановка не нужна.
             if (!controller.start() && controller.state.value.micState != MicState.OFF) {
-                Log.w(TAG, "startListening: распознавание не запустилось — останавливаем сервис")
+                AppLog.w(TAG, "startListening: распознавание не запустилось — останавливаем сервис")
                 stopListening()
             }
         }
@@ -433,11 +433,11 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             is VoiceCommand.Score ->
                 when (val result = currentEngine.applyAnnouncement(command.announcement)) {
                     ApplyResult.Applied -> {
-                        Log.d(TAG, "счёт применён: «$rawText»")
+                        AppLog.d(TAG, "счёт применён: «$rawText»")
                         confirmApplied(prev)
                     }
                     is ApplyResult.Rejected -> {
-                        Log.d(TAG, "счёт отклонён (${result.reason}): «$rawText»")
+                        AppLog.d(TAG, "счёт отклонён (${result.reason}): «$rawText»")
                         nack()
                         currentEngine.logNote(
                             when (result.reason) {
@@ -467,7 +467,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             VoiceCommand.ScoreQuery -> {
                 // Проговариваем записанный счёт гейма; сама речь — и есть подтверждение.
                 val text = ScoreSpeech.gameScore(currentEngine.state, s::name)
-                Log.d(TAG, "счёт озвучен: $text")
+                AppLog.d(TAG, "счёт озвучен: $text")
                 currentEngine.logNote("→ озвучено: $text")
                 speak(text)
             }
@@ -482,13 +482,13 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                     !s.strictValidation -> {
                         // Валидация отключена, но победитель гейма не определяется —
                         // не засчитываем, а спрашиваем счёт голосом.
-                        Log.d(TAG, "«гейм»: победитель не определён, запрошен счёт")
+                        AppLog.d(TAG, "«гейм»: победитель не определён, запрошен счёт")
                         currentEngine.logNote("→ «гейм»: непонятно, в чью пользу — запрошен счёт")
                         speak("Счёт?")
                     }
                     else -> {
                         // При таком счёте гейм не мог закончиться — ошибочная команда.
-                        Log.d(TAG, "«гейм» отклонён: гейм не мог завершиться при текущем счёте")
+                        AppLog.d(TAG, "«гейм» отклонён: гейм не мог завершиться при текущем счёте")
                         currentEngine.logNote("→ «гейм» не мог завершиться при текущем счёте — ошибочная команда")
                         nack()
                     }
@@ -552,7 +552,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val mode = if (enqueue) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
         requestDuck()
         val result = runCatching { t.speak(text, mode, null, "score-${utteranceSeq++}") }
-            .onFailure { Log.w(TAG, "tts: ошибка озвучки", it) }
+            .onFailure { AppLog.w(TAG, "tts: ошибка озвучки", it) }
         if (result.getOrNull() != TextToSpeech.SUCCESS) releaseDuck()
     }
 
@@ -561,7 +561,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private fun requestDuck() {
         duckCount++
         if (duckCount == 1) {
-            Log.d(TAG, "duck: запрос фокуса (приглушение музыки)")
+            AppLog.d(TAG, "duck: запрос фокуса (приглушение музыки)")
             audioManager.requestAudioFocus(duckFocusRequest)
         }
         restartDuckWatchdog()
@@ -570,7 +570,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private fun releaseDuck() {
         if (duckCount == 0) return
         if (--duckCount == 0) {
-            Log.d(TAG, "duck: фокус возвращён музыке")
+            AppLog.d(TAG, "duck: фокус возвращён музыке")
             cancelDuckWatchdog()
             audioManager.abandonAudioFocusRequest(duckFocusRequest)
         } else {
@@ -585,7 +585,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun forceReleaseDuck() {
         if (duckCount == 0 && activeSpeechCount == 0) return
-        Log.w(
+        AppLog.w(
             TAG,
             "duck: принудительный сброс фокуса (duckCount=$duckCount, activeSpeech=$activeSpeechCount)",
         )
@@ -612,13 +612,13 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Короткий beep — подтверждение, что объявление услышано, не глядя на экран. */
     private fun beep() {
-        Log.d(TAG, "beep: volume=${_uiState.value.signalVolume}")
+        AppLog.d(TAG, "beep: volume=${_uiState.value.signalVolume}")
         SignalPlayer.accept(_uiState.value.signalVolume)
     }
 
     /** Низкий двойной сигнал — команда распознана, но отклонена. */
     private fun nack() {
-        Log.d(TAG, "nack: volume=${_uiState.value.signalVolume}")
+        AppLog.d(TAG, "nack: volume=${_uiState.value.signalVolume}")
         SignalPlayer.reject(_uiState.value.signalVolume)
     }
 
@@ -626,7 +626,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private fun ring(times: Int) {
         viewModelScope.launch {
             val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            Log.d(TAG, "ring: times=$times, uri=$uri")
+            AppLog.d(TAG, "ring: times=$times, uri=$uri")
             if (uri == null) {
                 // Нет системного рингтона уведомлений — серия beep'ов вместо звонка.
                 repeat(times * 2) { beep(); delay(300) }
@@ -677,7 +677,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 cont.invokeOnCancellation { runCatching { player.release() } }
                 player.prepareAsync()
             }.onFailure {
-                Log.w(TAG, "ring: ошибка воспроизведения", it)
+                AppLog.w(TAG, "ring: ошибка воспроизведения", it)
                 if (cont.isActive) cont.resume(Unit)
             }
         }

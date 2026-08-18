@@ -163,11 +163,19 @@
   (opus #9, devin P3)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="621-627" />
 
-- [ ] **11. Распознанная речь и прочие чувствительные данные пишутся в логи релизной сборки**
+- [x] **11. Распознанная речь и прочие чувствительные данные пишутся в логи релизной сборки**
   `isMinifyEnabled = false`, правил стрипа логов нет — весь `Log.d` с распознанным
   текстом (и другими данными) попадает в logcat релизной сборки.
-  Исправление: debug-only обёртка над логированием либо ProGuard-правило
-  `assumenosideeffects` для `android.util.Log`.
+  Исправлено: добавлена debug-only обёртка `util/AppLog.kt` — `d`/`i` пишутся
+  только при `BuildConfig.DEBUG` (release собирается без минификации, поэтому
+  фильтрация в рантайме, а не ProGuard'ом); `w`/`e` идут в logcat всегда —
+  это диагностика ошибок без пользовательского текста. Все вызовы
+  `android.util.Log` в `MatchViewModel`/`ListeningController`/`ListeningService`
+  переведены на `AppLog`. Дополнительно `app/proguard-rules.pro` с
+  `-assumenosideeffects` для `Log.v/d/i` — вступит в силу при включении minify
+  (п.24). Попутно исправлена конфигурация Gradle: lint-vital задачи release-сборки
+  читали вывод `unpackVoskModel` без зависимости и `assembleRelease` падал на
+  implicit-dependency validation — теперь зависят явно.
   (opus #10)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\service\ListeningController.kt" lines="50" />
 

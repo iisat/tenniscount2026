@@ -1,9 +1,9 @@
 package com.tenniscount.app.service
 
 import android.content.Context
-import android.util.Log
 import com.tenniscount.app.speech.ModelManager
 import com.tenniscount.app.speech.VoskRecognizer
+import com.tenniscount.app.util.AppLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,13 +49,13 @@ class ListeningController private constructor(context: Context) {
         }
 
         override fun onFinalResult(text: String) {
-            Log.d(TAG, "распознано: «$text»")
+            AppLog.d(TAG, "распознано: «$text»")
             _state.update { it.copy(lastHeard = text) }
             listener?.onFinalResult(text)
         }
 
         override fun onError(message: String) {
-            Log.e(TAG, "ошибка распознавания: $message")
+            AppLog.e(TAG, "ошибка распознавания: $message")
             _state.update { it.copy(micState = MicState.ERROR, error = message) }
             listener?.onError(message)
         }
@@ -86,12 +86,12 @@ class ListeningController private constructor(context: Context) {
      */
     suspend fun start(): Boolean {
         if (!startMutex.tryLock()) {
-            Log.i(TAG, "start: запуск уже идёт — пропускаем")
+            AppLog.i(TAG, "start: запуск уже идёт — пропускаем")
             return true
         }
         val generation = startGeneration.incrementAndGet()
         try {
-            Log.i(TAG, "start: запуск прослушивания")
+            AppLog.i(TAG, "start: запуск прослушивания")
             _state.update { it.copy(error = null) }
             return try {
                 if (!modelManager.isModelReady()) {
@@ -106,16 +106,16 @@ class ListeningController private constructor(context: Context) {
                 recognizer.prepare()
                 if (isCancelled(generation, "после подготовки")) return false
                 if (recognizer.start()) {
-                    Log.i(TAG, "start: микрофон слушает")
+                    AppLog.i(TAG, "start: микрофон слушает")
                     _state.update { it.copy(micState = MicState.LISTENING) }
                     true
                 } else {
-                    Log.w(TAG, "start: не удалось запустить микрофон")
+                    AppLog.w(TAG, "start: не удалось запустить микрофон")
                     _state.update { it.copy(micState = MicState.ERROR) }
                     false
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "start: ошибка подготовки", e)
+                AppLog.e(TAG, "start: ошибка подготовки", e)
                 _state.update {
                     it.copy(
                         micState = MicState.ERROR,
@@ -133,18 +133,18 @@ class ListeningController private constructor(context: Context) {
     /** true, если за время запуска пришёл [stop] — запуск отменён. */
     private fun isCancelled(generation: Int, stage: String): Boolean {
         if (generation == startGeneration.get()) return false
-        Log.i(TAG, "start: отменён остановкой $stage")
+        AppLog.i(TAG, "start: отменён остановкой $stage")
         return true
     }
 
     /** Пауза прослушивания без остановки сервиса (экономия батареи). */
     fun setPaused(paused: Boolean) {
-        Log.i(TAG, "setPaused: $paused")
+        AppLog.i(TAG, "setPaused: $paused")
         recognizer.setPaused(paused)
     }
 
     fun stop() {
-        Log.i(TAG, "stop: прослушивание остановлено")
+        AppLog.i(TAG, "stop: прослушивание остановлено")
         // Инвалидируем незавершённый start(): после ближайшей проверки
         // поколения он завершится, не запуская микрофон.
         startGeneration.incrementAndGet()

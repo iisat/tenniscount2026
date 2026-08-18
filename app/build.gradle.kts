@@ -118,6 +118,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Правила стрипа логов (assumenosideeffects) на случай включения minify;
+            // пока он выключен, d/i фильтруются в рантайме через util/AppLog.kt.
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
@@ -145,8 +148,11 @@ android {
 }
 
 // Распакованная модель должна лежать в assets до слияния ресурсов.
+// Lint-vital задачи (lintVitalAnalyze*, generate*LintVitalReportModel и т.п.)
+// читают те же assets при сборке release.
 tasks.configureEach {
     if (name.startsWith("merge") && name.endsWith("Assets")) dependsOn(unpackVoskModel)
+    if (name.contains("lintvital", ignoreCase = true)) dependsOn(unpackVoskModel)
 }
 
 dependencies {

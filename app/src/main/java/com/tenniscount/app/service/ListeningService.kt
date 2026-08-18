@@ -10,11 +10,11 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.tenniscount.app.MainActivity
 import com.tenniscount.app.R
+import com.tenniscount.app.util.AppLog
 
 /**
  * Foreground service типа «microphone»: держит процесс живым и сохраняет
@@ -30,11 +30,11 @@ class ListeningService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.i(TAG, "onStartCommand: action=${intent?.action ?: "START"}")
+        AppLog.i(TAG, "onStartCommand: action=${intent?.action ?: "START"}")
         if (intent == null) {
             // Рестарт после убийства процесса: распознавание не восстановлено,
             // показывать «фантомное» уведомление о прослушивании нельзя.
-            Log.w(TAG, "onStartCommand: рестарт без интента — останавливаемся")
+            AppLog.w(TAG, "onStartCommand: рестарт без интента — останавливаемся")
             stopSelf()
             return START_NOT_STICKY
         }
