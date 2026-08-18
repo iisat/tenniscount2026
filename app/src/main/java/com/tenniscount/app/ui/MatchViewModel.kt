@@ -747,7 +747,13 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     /** Восстановление незавершённого матча при запуске приложения. */
     private fun restoreSavedMatch() {
         val saved = prefs.getString(KEY_MATCH_STATE, null) ?: return
-        val state = MatchStateCodec.decode(saved) ?: return
+        val state = MatchStateCodec.decode(saved)
+        if (state == null) {
+            // Повреждённые данные не восстанавливаем, чтобы не зацикливаться
+            // на битой persisted-строке при каждом запуске.
+            prefs.edit { remove(KEY_MATCH_STATE) }
+            return
+        }
         engine = MatchEngine(state.firstServer).apply {
             strictValidation = _uiState.value.strictValidation
             restore(state)

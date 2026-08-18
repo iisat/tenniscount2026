@@ -4,12 +4,20 @@ import kotlin.math.abs
 
 /** Итог завершённого сета. */
 data class SetScore(val gamesP1: Int, val gamesP2: Int) {
+    init {
+        require(gamesP1 >= 0 && gamesP2 >= 0) { "Геймы не могут быть отрицательными" }
+    }
+
     val winner: Player?
         get() = when {
             gamesP1 > gamesP2 -> Player.ONE
             gamesP2 > gamesP1 -> Player.TWO
             else -> null
         }
+
+    /** Соответствует ли счёт правилам завершённого сета (один игрок набрал ≥6 геймов с разницей ≥2). */
+    val isFinishedScore: Boolean
+        get() = (gamesP1 >= 6 || gamesP2 >= 6) && abs(gamesP1 - gamesP2) >= 2
 
     override fun toString(): String = "$gamesP1:$gamesP2"
 }

@@ -65,6 +65,27 @@ class MatchStateCodecTest {
     }
 
     @Test
+    fun `decode rejects invalid completed sets`() {
+        // Отрицательные геймы.
+        assertNull(MatchStateCodec.decode("v1|ONE|-1:0|0|0|0|0"))
+        // 0:0 не может считаться завершённым сетом.
+        assertNull(MatchStateCodec.decode("v1|ONE|0:0|0|0|0|0"))
+        // Незавершённые или не соответствующие правилам сеты отклоняются.
+        assertNull(MatchStateCodec.decode("v1|ONE|5:4|0|0|0|0"))
+        assertNull(MatchStateCodec.decode("v1|ONE|6:5|0|0|0|0"))
+        assertNull(MatchStateCodec.decode("v1|ONE|7:6|0|0|0|0"))
+        assertNull(MatchStateCodec.decode("v1|ONE|3:3|0|0|0|0"))
+        // Валидный завершённый сет (6:4) всё ещё проходит.
+        assertEquals(
+            MatchState(
+                firstServer = Player.ONE,
+                completedSets = listOf(SetScore(6, 4)),
+            ),
+            MatchStateCodec.decode("v1|ONE|6:4|0|0|0|0"),
+        )
+    }
+
+    @Test
     fun `encoded format example`() {
         val state = MatchState(
             firstServer = Player.ONE,

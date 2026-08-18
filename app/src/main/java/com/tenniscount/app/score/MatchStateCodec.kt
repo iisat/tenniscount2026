@@ -34,7 +34,9 @@ object MatchStateCodec {
             parts[2].split(SETS_DELIM).map {
                 val games = it.split(":")
                 require(games.size == 2)
-                SetScore(games[0].toInt(), games[1].toInt())
+                val score = SetScore(games[0].toInt(), games[1].toInt())
+                require(score.isFinishedScore) { "Завершённый сет должен соответствовать правилам: $score" }
+                score
             }
         }
         val currentSet = SetState(

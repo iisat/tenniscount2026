@@ -179,7 +179,7 @@
   (opus #10)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\service\ListeningController.kt" lines="50" />
 
-- [ ] **12. Недостаточная валидация состояния при decode / некорректные invariants**
+- [x] **12. Недостаточная валидация состояния при decode / некорректные invariants**
   `MatchStateCodec.decode()` недостаточно строго проверяет `completedSets` —
   теоретически можно восстановить `-1:0`, `0:0` как completed, `100:1` и т.п. и
   использовать это в дальнейших расчётах (усугубляет проблему п.1).
@@ -189,6 +189,7 @@
   codec/domain тесты на invalid data.
   (gpt-5 #8)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\score\MatchStateCodec.kt" />
+  <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\score\SetState.kt" lines="5-20" />
 
 ---
 

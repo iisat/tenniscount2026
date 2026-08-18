@@ -74,4 +74,21 @@ class SetStateTest {
         assertEquals(Player.ONE, SetScore(6, 4).winner)
         assertEquals(Player.TWO, SetScore(4, 6).winner)
     }
+
+    @Test
+    fun `SetScore finished score follows tennis rules`() {
+        assertTrue(SetScore(6, 4).isFinishedScore)
+        assertTrue(SetScore(7, 5).isFinishedScore)
+        assertTrue(SetScore(8, 6).isFinishedScore)
+        assertFalse(SetScore(0, 0).isFinishedScore)
+        assertFalse(SetScore(3, 3).isFinishedScore)
+        assertFalse(SetScore(5, 4).isFinishedScore)
+        assertFalse(SetScore(6, 5).isFinishedScore)
+        assertFalse(SetScore(7, 6).isFinishedScore)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `SetScore rejects negative games`() {
+        SetScore(-1, 0)
+    }
 }
