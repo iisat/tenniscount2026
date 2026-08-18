@@ -109,6 +109,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     /** Последнее синхронизированное состояние — для звуковых сигналов о гейме/сете. */
     private var lastSyncedState: MatchState? = null
 
+    /** Последнее записанное в prefs состояние — чтобы не переписывать его без изменений. */
+    private var lastPersistedState: String? = null
+
     private val controller = ListeningController.get(application)
     private val db = MatchDatabase.get(application)
 
@@ -723,9 +726,14 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun persistCurrentMatch() {
         val e = engine ?: return
+        val encoded = MatchStateCodec.encode(e.state)
+        // sync() приходит и на события без смены счёта (нераспознанная фраза,
+        // запрос «сколько», отклонённая команда) — одинаковое состояние не пишем.
+        if (encoded == lastPersistedState) return
         prefs.edit {
-            putString(KEY_MATCH_STATE, MatchStateCodec.encode(e.state))
+            putString(KEY_MATCH_STATE, encoded)
         }
+        lastPersistedState = encoded
     }
 
     private fun clearPersistedMatch() {
@@ -733,6 +741,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             remove(KEY_MATCH_STATE)
             remove(KEY_MATCH_LOG) // legacy-ключ, больше не пишется
         }
+        lastPersistedState = null
     }
 
     /** Восстановление незавершённого матча при запуске приложения. */
@@ -746,6 +755,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         // Сигналы о переходах сравнивают с lastSyncedState: восстановленное
         // состояние не должно вызывать звонок гейма/сета при первом sync().
         lastSyncedState = state
+        // И оно уже лежит в prefs — первый sync() после рестарта не должен
+        // перезаписывать файл настроек тем же значением.
+        lastPersistedState = saved
         _uiState.update {
             it.copy(screen = Screen.SCOREBOARD, matchState = state)
         }
