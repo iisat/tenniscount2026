@@ -15,19 +15,37 @@ import androidx.core.app.ServiceCompat
 import com.tenniscount.app.MainActivity
 import com.tenniscount.app.R
 import com.tenniscount.app.util.AppLog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Foreground service типа «microphone»: держит процесс живым и сохраняет
  * доступ к микрофону при выключенном/заблокированном экране. Само
  * распознавание живёт в [ListeningController]; сервис показывает постоянное
  * уведомление с текущим счётом и кнопками «Пауза/Продолжить» и «Стоп».
+ *
+ * Уведомление обновляется напрямую из общего [ListeningController.state],
+ * без лишних Intent'ов на каждую распознанную фразу.
  */
 class ListeningService : Service() {
 
-    private var paused = false
-    private var scoreText: String = ""
+    private val controller by lazy { ListeningController.get(this) }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var stateJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        createChannel()
+        stateJob = scope.launch {
+            controller.state.collect { refreshNotification() }
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         AppLog.i(TAG, "onStartCommand: action=${intent?.action ?: "START"}")
@@ -40,21 +58,13 @@ class ListeningService : Service() {
         }
         when (intent.action) {
             ACTION_STOP -> {
-                ListeningController.get(this).onStopRequested?.invoke()
+                controller.onStopRequested?.invoke()
                 stopSelf()
             }
             ACTION_PAUSE_TOGGLE -> {
-                paused = !paused
-                ListeningController.get(this).onPauseToggleRequested?.invoke()
-                refreshNotification()
-            }
-            ACTION_UPDATE -> {
-                scoreText = intent.getStringExtra(EXTRA_TEXT).orEmpty()
-                paused = intent.getBooleanExtra(EXTRA_PAUSED, paused)
-                refreshNotification()
+                controller.onPauseToggleRequested?.invoke()
             }
             else -> {
-                scoreText = intent.getStringExtra(EXTRA_TEXT).orEmpty()
                 startForegroundWithNotification()
             }
         }
@@ -64,8 +74,13 @@ class ListeningService : Service() {
         return START_NOT_STICKY
     }
 
+    override fun onDestroy() {
+        stateJob?.cancel()
+        scope.cancel()
+        super.onDestroy()
+    }
+
     private fun startForegroundWithNotification() {
-        createChannel()
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
@@ -84,6 +99,7 @@ class ListeningService : Service() {
     }
 
     private fun buildNotification(): Notification {
+        val state = controller.state.value
         val openApp = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
@@ -102,13 +118,13 @@ class ListeningService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle(getString(R.string.notification_title))
-            .setContentText(scoreText)
+            .setContentText(state.scoreText)
             .setContentIntent(openApp)
             .setOngoing(true)
             .setSilent(true)
             .addAction(
                 0,
-                getString(if (paused) R.string.resume else R.string.pause),
+                getString(if (state.paused) R.string.resume else R.string.pause),
                 pauseToggle,
             )
             .addAction(0, getString(R.string.listen_stop), stop)
@@ -130,20 +146,11 @@ class ListeningService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "com.tenniscount.app.action.STOP"
         private const val ACTION_PAUSE_TOGGLE = "com.tenniscount.app.action.PAUSE_TOGGLE"
-        private const val ACTION_UPDATE = "com.tenniscount.app.action.UPDATE"
-        private const val EXTRA_TEXT = "text"
-        private const val EXTRA_PAUSED = "paused"
 
-        fun startIntent(context: Context, scoreText: String): Intent =
-            Intent(context, ListeningService::class.java).putExtra(EXTRA_TEXT, scoreText)
+        fun startIntent(context: Context): Intent =
+            Intent(context, ListeningService::class.java)
 
         fun stopIntent(context: Context): Intent =
             Intent(context, ListeningService::class.java).setAction(ACTION_STOP)
-
-        fun updateIntent(context: Context, scoreText: String, paused: Boolean): Intent =
-            Intent(context, ListeningService::class.java)
-                .setAction(ACTION_UPDATE)
-                .putExtra(EXTRA_TEXT, scoreText)
-                .putExtra(EXTRA_PAUSED, paused)
     }
 }

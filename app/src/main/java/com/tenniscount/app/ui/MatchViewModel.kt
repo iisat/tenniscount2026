@@ -299,7 +299,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         } else if (_uiState.value.micState == MicState.LISTENING) {
             SignalPlayer.setKeepAlive(true)
         }
-        updateNotification()
+        controller.setPausedMatch(newPaused)
     }
 
     fun finishMatch() {
@@ -388,9 +388,11 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         // не запустило второй controller.start() (toggleListening игнорирует
         // нажатия в INSTALLING/PREPARING).
         _uiState.update { it.copy(warning = null, micState = MicState.PREPARING) }
+        controller.setScoreText(currentScoreText())
+        controller.setPausedMatch(_uiState.value.paused)
         ContextCompat.startForegroundService(
             context,
-            ListeningService.startIntent(context, currentScoreText()),
+            ListeningService.startIntent(context),
         )
         // Держим аудиотракт «тёплым», иначе холодный старт съедает короткие
         // сигналы — но не на паузе: beep/nack на паузе всё равно не звучат
@@ -425,14 +427,6 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         getApplication<Application>().stopService(
             android.content.Intent(getApplication(), ListeningService::class.java)
         )
-    }
-
-    /** Обновляет текст счёта в уведомлении, если прослушивание активно. */
-    private fun updateNotification() {
-        val s = _uiState.value
-        if (s.micState != MicState.LISTENING) return
-        val context = getApplication<Application>()
-        context.startService(ListeningService.updateIntent(context, currentScoreText(), s.paused))
     }
 
     private fun currentScoreText(): String {
@@ -734,7 +728,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         persistCurrentMatch()
-        updateNotification()
+        controller.setScoreText(currentScoreText())
     }
 
     // --- Персистентность незавершённого матча ---

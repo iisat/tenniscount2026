@@ -264,7 +264,7 @@
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="288-303" />
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="373-413" />
 
-- [ ] **18. Дублирование состояния и обновление уведомления через интенты**
+- [x] **18. Дублирование состояния и обновление уведомления через интенты**
   Каждая распознанная фраза порождает `Intent → onStartCommand → notify()`; состояние
   `paused` дублируется в сервисе и во ViewModel и синхронизируется вручную.
   Исправление: обновлять уведомление напрямую из общего состояния

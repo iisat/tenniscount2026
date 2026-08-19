@@ -19,6 +19,10 @@ data class ListeningState(
     val error: String? = null,
     val installProgress: Int? = null,
     val lastHeard: String = "",
+    /** Текущий счёт матча для уведомления. */
+    val scoreText: String = "",
+    /** Состояние паузы матча для уведомления. */
+    val paused: Boolean = false,
 )
 
 /**
@@ -141,6 +145,16 @@ class ListeningController private constructor(context: Context) {
     fun setPaused(paused: Boolean) {
         AppLog.i(TAG, "setPaused: $paused")
         recognizer.setPaused(paused)
+    }
+
+    /** Обновляет текст счёта в общем состоянии (уведомление подхватит сервис). */
+    fun setScoreText(text: String) {
+        _state.update { it.copy(scoreText = text) }
+    }
+
+    /** Обновляет флаг паузы матча в общем состоянии (уведомление подхватит сервис). */
+    fun setPausedMatch(paused: Boolean) {
+        _state.update { it.copy(paused = paused) }
     }
 
     fun stop() {
