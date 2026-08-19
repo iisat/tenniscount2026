@@ -289,6 +289,11 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val newPaused = !_uiState.value.paused
         _uiState.update { it.copy(paused = newPaused) }
         controller.setPaused(newPaused)
+        // Во время паузы beep/nack не звучат (applyVoiceCommand игнорирует
+        // распознанное при paused) — держать аудиотракт прогретым незачем.
+        if (_uiState.value.micState == MicState.LISTENING) {
+            SignalPlayer.setKeepAlive(!newPaused)
+        }
         updateNotification()
     }
 
