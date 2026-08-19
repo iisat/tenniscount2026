@@ -291,8 +291,13 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         controller.setPaused(newPaused)
         // Во время паузы beep/nack не звучат (applyVoiceCommand игнорирует
         // распознанное при paused) — держать аудиотракт прогретым незачем.
-        if (_uiState.value.micState == MicState.LISTENING) {
-            SignalPlayer.setKeepAlive(!newPaused)
+        // На паузу гасим keepAlive независимо от micState (в т.ч. во время
+        // PREPARING/INSTALLING); включаем обратно только если микрофон
+        // реально слушает — иначе создали бы поток тишины на OFF/ERROR.
+        if (newPaused) {
+            SignalPlayer.setKeepAlive(false)
+        } else if (_uiState.value.micState == MicState.LISTENING) {
+            SignalPlayer.setKeepAlive(true)
         }
         updateNotification()
     }
@@ -387,14 +392,23 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             context,
             ListeningService.startIntent(context, currentScoreText()),
         )
-        // Держим аудиотракт «тёплым», иначе холодный старт съедает короткие сигналы.
-        SignalPlayer.setKeepAlive(true)
+        // Держим аудиотракт «тёплым», иначе холодный старт съедает короткие
+        // сигналы — но не на паузе: beep/nack на паузе всё равно не звучат
+        // (см. togglePause).
+        SignalPlayer.setKeepAlive(!_uiState.value.paused)
         viewModelScope.launch {
             // При ошибке запуска (модель не загрузилась/повреждена, микрофон
             // не стартовал) гасим сервис и keepAlive, иначе они «зависнут».
             // Если start() отменён пришедшим stop() (контроллер уже в OFF),
             // повторная остановка не нужна.
-            if (!controller.start() && controller.state.value.micState != MicState.OFF) {
+            if (controller.start()) {
+                // VoskRecognizer.setPaused() до start() не запоминается —
+                // применяем актуальное состояние паузы (могло измениться,
+                // пока шла установка/подготовка модели) сейчас.
+                val paused = _uiState.value.paused
+                controller.setPaused(paused)
+                SignalPlayer.setKeepAlive(!paused)
+            } else if (controller.state.value.micState != MicState.OFF) {
                 AppLog.w(TAG, "startListening: распознавание не запустилось — останавливаем сервис")
                 stopListening()
             }

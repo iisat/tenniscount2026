@@ -248,9 +248,21 @@
   beep/nack не звучат в принципе (`applyVoiceCommand` игнорирует распознанное
   при `paused`), поэтому `SignalPlayer.setKeepAlive(false)` теперь вызывается
   и на паузе, а не только при полной остановке прослушивания — при снятии
-  с паузы тракт прогревается заново.
+  с паузы тракт прогревается заново. `togglePause()` гасит `keepAlive`
+  независимо от `micState` (в т.ч. во время `PREPARING`/`INSTALLING`), а
+  включает обратно только если микрофон реально в `LISTENING`.
+  Закрыт и смежный race: `startListening()` раньше безусловно включал
+  `keepAlive` и не учитывал, что матч мог быть на паузе (кнопка «Слушать»
+  не блокируется `paused`), а `VoskRecognizer.setPaused()`, вызванный до
+  `start()` (пока `speechService == null`), тихо терялся — после окончания
+  установки/подготовки модели распознавание стартовало без паузы, хотя UI
+  показывал «пауза». Теперь `startListening()` выставляет `keepAlive` по
+  текущему `paused` сразу и повторно синхронизирует `controller.setPaused(...)`
+  и `keepAlive` по актуальному `paused` после успешного `controller.start()` —
+  корректно и если пауза была нажата/снята во время `PREPARING`.
   (opus #13)
-  <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="288-297" />
+  <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="288-303" />
+  <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\MatchViewModel.kt" lines="373-413" />
 
 - [ ] **18. Дублирование состояния и обновление уведомления через интенты**
   Каждая распознанная фраза порождает `Intent → onStartCommand → notify()`; состояние
