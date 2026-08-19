@@ -91,7 +91,12 @@ object SignalPlayer {
                 // микшер срезает первые миллисекунды, пока открывает путь вывода.
                 val leadMs = 60
                 val samples = synthesize(listOf(0 to leadMs) + segments, volume)
-                val track = buildTrack(samples.size * 2, AudioTrack.MODE_STATIC)
+                val minBuffer = AudioTrack.getMinBufferSize(
+                    SAMPLE_RATE,
+                    AudioFormat.CHANNEL_OUT_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                )
+                val track = buildTrack(maxOf(samples.size * 2, minBuffer), AudioTrack.MODE_STATIC)
                 track.write(samples, 0, samples.size)
                 track.play()
                 delay(segments.sumOf { it.second } + leadMs + 100L)
