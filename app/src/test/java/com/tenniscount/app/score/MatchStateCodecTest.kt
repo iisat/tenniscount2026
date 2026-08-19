@@ -62,6 +62,9 @@ class MatchStateCodecTest {
         // Завершённый гейм/сет в «текущем» состоянии — порча данных.
         assertNull(MatchStateCodec.decode("v1|ONE||0|0|4|0"))
         assertNull(MatchStateCodec.decode("v1|ONE||6|4|0|0"))
+        // Невозможный текущий сет: терминальный, но не достижимый по правилам.
+        assertNull(MatchStateCodec.decode("v1|ONE||7|4|0|0"))
+        assertNull(MatchStateCodec.decode("v1|ONE||100|1|0|0"))
     }
 
     @Test

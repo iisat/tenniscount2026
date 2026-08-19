@@ -213,9 +213,18 @@ class MatchEngine(firstServer: Player) {
         )
     }
 
-    /** Ручная правка счёта геймов в текущем сете. */
+    /**
+     * Ручная правка счёта геймов в текущем сете.
+     * Если заданный счёт является терминальным (завершает сет), он должен быть
+     * реально достижимым (проходить [SetScore.isFinishedScore]). Например,
+     * 6:4 допустим (сет завершается), а 7:4 или 100:1 — нет.
+     */
     fun editSetScore(gamesP1: Int, gamesP2: Int) {
         require(gamesP1 >= 0 && gamesP2 >= 0) { "Недопустимый счёт сета" }
+        val set = SetState(gamesP1, gamesP2)
+        require(!set.isFinished || set.score.isFinishedScore) {
+            "Недостижимый завершённый сет: $gamesP1:$gamesP2"
+        }
         mutate(
             state.withGames(gamesP1, gamesP2),
             "Правка геймов: $gamesP1:$gamesP2",

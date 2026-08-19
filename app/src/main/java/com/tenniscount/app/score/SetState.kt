@@ -46,16 +46,15 @@ data class SetState(
         require(gamesP1 >= 0 && gamesP2 >= 0) { "Геймы не могут быть отрицательными" }
     }
 
+    /**
+     * Сет считается терминальным (завершённым) при ≥6 геймах с разницей ≥2.
+     * Это шире, чем [SetScore.isFinishedScore]: 7:4 или 100:1 — терминальные
+     * (в нормальной игре недостижимые, но однозначно «завершённые»), поэтому
+     * codec и ручная правка их отклоняют по-своему.
+     */
     val isFinished: Boolean
-        get() {
-            val winner = maxOf(gamesP1, gamesP2)
-            val loser = minOf(gamesP1, gamesP2)
-            return when {
-                winner == 6 -> loser <= 4
-                winner >= 7 -> winner - loser == 2
-                else -> false
-            }
-        }
+        get() = (gamesP1 >= 6 || gamesP2 >= 6) &&
+            (gamesP1 - gamesP2 >= 2 || gamesP2 - gamesP1 >= 2)
 
     val winner: Player?
         get() = if (!isFinished) null else if (gamesP1 > gamesP2) Player.ONE else Player.TWO

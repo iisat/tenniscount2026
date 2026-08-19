@@ -422,4 +422,23 @@ class MatchEngineTest {
         assertEquals("событие 149", engine.log.last())
         assertEquals("событие 50", engine.log.first())
     }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `manual set edit rejects impossible finished score 7-4`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.editSetScore(7, 4)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `manual set edit rejects impossible finished score 100-1`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.editSetScore(100, 1)
+    }
+
+    @Test
+    fun `manual set edit allows valid finishing score 6-4`() {
+        val engine = MatchEngine(firstServer = Player.ONE)
+        engine.editSetScore(6, 4)
+        assertEquals(listOf(SetScore(6, 4)), engine.state.completedSets)
+    }
 }
