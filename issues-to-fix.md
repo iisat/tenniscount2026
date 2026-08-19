@@ -213,10 +213,14 @@
   (devin P3, gpt-5 #7, opus hygiene)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\AndroidManifest.xml" lines="13-15" />
 
-- [ ] **15. `AudioTrack` в `MODE_STATIC` без проверки `getMinBufferSize()`**
-  `SignalPlayer.play` передаёт `samples.size * 2` напрямую в `buildTrack` без сверки
-  с `getMinBufferSize()` — на части устройств возможен
-  `IllegalArgumentException`/`IllegalStateException`.
+- [x] **15. Защитное выравнивание размера буфера `AudioTrack`**
+  `AudioTrack.getMinBufferSize()` формально относится к `MODE_STREAM`; для `MODE_STATIC`
+  размер буфера должен как минимум вмещать весь PCM-clip. В `SignalPlayer.play`
+  используется `maxOf(samples.size * 2, getMinBufferSize(...))` как
+  device-compatibility hardening: избыточный буфер не мешает `MODE_STATIC`, а
+  отрицательный `getMinBufferSize()` не приводит к падению. Исходная формулировка
+  аудита о неизбежном `IllegalArgumentException`/`IllegalStateException` при
+  отсутствии сверки была преувеличена. Пункт закрыт.
   (devin P2)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\SignalPlayer.kt" lines="91-97" />
 
