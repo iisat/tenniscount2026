@@ -9,6 +9,12 @@ data class MatchState(
     val completedSets: List<SetScore> = emptyList(),
     val currentSet: SetState = SetState(),
 ) {
+    init {
+        require(completedSets.all { it.isFinishedScore }) {
+            "completedSets должны содержать только завершённые сеты"
+        }
+    }
+
     /** Сколько геймов сыграно за матч — определяет подающего. */
     val totalGames: Int
         get() = completedSets.sumOf { it.gamesP1 + it.gamesP2 } + currentSet.totalGames

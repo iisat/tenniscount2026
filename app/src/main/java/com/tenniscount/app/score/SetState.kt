@@ -1,7 +1,5 @@
 package com.tenniscount.app.score
 
-import kotlin.math.abs
-
 /** Итог завершённого сета. */
 data class SetScore(val gamesP1: Int, val gamesP2: Int) {
     init {
@@ -15,9 +13,21 @@ data class SetScore(val gamesP1: Int, val gamesP2: Int) {
             else -> null
         }
 
-    /** Соответствует ли счёт правилам завершённого сета (один игрок набрал ≥6 геймов с разницей ≥2). */
+    /**
+     * Соответствует ли счёт правилам завершённого сета (без тай-брейка):
+     * - 6:0..6:4 (победитель набрал 6 при проигравшем ≤4);
+     * - после 5:5 игра идёт до преимущества ровно в 2 гейма (7:5, 8:6, 9:7...).
+     */
     val isFinishedScore: Boolean
-        get() = (gamesP1 >= 6 || gamesP2 >= 6) && abs(gamesP1 - gamesP2) >= 2
+        get() {
+            val winner = maxOf(gamesP1, gamesP2)
+            val loser = minOf(gamesP1, gamesP2)
+            return when {
+                winner == 6 -> loser <= 4
+                winner >= 7 -> winner - loser == 2
+                else -> false
+            }
+        }
 
     override fun toString(): String = "$gamesP1:$gamesP2"
 }
@@ -37,7 +47,15 @@ data class SetState(
     }
 
     val isFinished: Boolean
-        get() = (gamesP1 >= 6 || gamesP2 >= 6) && abs(gamesP1 - gamesP2) >= 2
+        get() {
+            val winner = maxOf(gamesP1, gamesP2)
+            val loser = minOf(gamesP1, gamesP2)
+            return when {
+                winner == 6 -> loser <= 4
+                winner >= 7 -> winner - loser == 2
+                else -> false
+            }
+        }
 
     val winner: Player?
         get() = if (!isFinished) null else if (gamesP1 > gamesP2) Player.ONE else Player.TWO

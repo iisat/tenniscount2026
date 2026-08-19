@@ -75,13 +75,45 @@ class MatchStateCodecTest {
         assertNull(MatchStateCodec.decode("v1|ONE|6:5|0|0|0|0"))
         assertNull(MatchStateCodec.decode("v1|ONE|7:6|0|0|0|0"))
         assertNull(MatchStateCodec.decode("v1|ONE|3:3|0|0|0|0"))
-        // Валидный завершённый сет (6:4) всё ещё проходит.
+        // После 5:5 разница строго 2, сет с разницей >2 невозможен.
+        assertNull(MatchStateCodec.decode("v1|ONE|7:4|0|0|0|0"))
+        assertNull(MatchStateCodec.decode("v1|ONE|8:5|0|0|0|0"))
+        assertNull(MatchStateCodec.decode("v1|ONE|100:1|0|0|0|0"))
+        // Валидные завершённые сеты проходят.
         assertEquals(
             MatchState(
                 firstServer = Player.ONE,
                 completedSets = listOf(SetScore(6, 4)),
             ),
             MatchStateCodec.decode("v1|ONE|6:4|0|0|0|0"),
+        )
+        assertEquals(
+            MatchState(
+                firstServer = Player.ONE,
+                completedSets = listOf(SetScore(6, 0)),
+            ),
+            MatchStateCodec.decode("v1|ONE|6:0|0|0|0|0"),
+        )
+        assertEquals(
+            MatchState(
+                firstServer = Player.TWO,
+                completedSets = listOf(SetScore(7, 5)),
+            ),
+            MatchStateCodec.decode("v1|TWO|7:5|0|0|0|0"),
+        )
+        assertEquals(
+            MatchState(
+                firstServer = Player.ONE,
+                completedSets = listOf(SetScore(8, 6)),
+            ),
+            MatchStateCodec.decode("v1|ONE|8:6|0|0|0|0"),
+        )
+        assertEquals(
+            MatchState(
+                firstServer = Player.ONE,
+                completedSets = listOf(SetScore(98, 100)),
+            ),
+            MatchStateCodec.decode("v1|ONE|98:100|0|0|0|0"),
         )
     }
 

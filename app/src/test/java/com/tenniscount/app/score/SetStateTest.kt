@@ -77,14 +77,25 @@ class SetStateTest {
 
     @Test
     fun `SetScore finished score follows tennis rules`() {
+        // Валидные завершённые сеты.
+        assertTrue(SetScore(6, 0).isFinishedScore)
         assertTrue(SetScore(6, 4).isFinishedScore)
         assertTrue(SetScore(7, 5).isFinishedScore)
         assertTrue(SetScore(8, 6).isFinishedScore)
+        assertTrue(SetScore(0, 6).isFinishedScore)
+        assertTrue(SetScore(4, 6).isFinishedScore)
+        assertTrue(SetScore(98, 100).isFinishedScore)
+
+        // Невалидные: незавершённые, невозможные в рамках правил.
         assertFalse(SetScore(0, 0).isFinishedScore)
         assertFalse(SetScore(3, 3).isFinishedScore)
         assertFalse(SetScore(5, 4).isFinishedScore)
         assertFalse(SetScore(6, 5).isFinishedScore)
         assertFalse(SetScore(7, 6).isFinishedScore)
+        // После 5:5 недостижимые: разница >2.
+        assertFalse(SetScore(7, 4).isFinishedScore)
+        assertFalse(SetScore(8, 5).isFinishedScore)
+        assertFalse(SetScore(100, 1).isFinishedScore)
     }
 
     @Test(expected = IllegalArgumentException::class)

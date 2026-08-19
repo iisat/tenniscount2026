@@ -11,9 +11,13 @@ class ScoreSpeechTest {
 
     private fun state(pointsP1: Int, pointsP2: Int, serverTwo: Boolean = false) = MatchState(
         firstServer = Player.ONE,
-        // 7+4 = 11 сыгранных геймов (нечётное) — подаёт игрок 2.
-        completedSets = if (serverTwo) listOf(SetScore(7, 4)) else emptyList(),
-        currentSet = SetState(0, 0, GameState(pointsP1, pointsP2)),
+        // 6+4+1 = 11 сыгранных геймов (нечётное) — подаёт игрок 2.
+        completedSets = if (serverTwo) listOf(SetScore(6, 4)) else emptyList(),
+        currentSet = SetState(
+            gamesP1 = if (serverTwo) 1 else 0,
+            gamesP2 = 0,
+            currentGame = GameState(pointsP1, pointsP2),
+        ),
     )
 
     @Test
