@@ -204,7 +204,7 @@
   (devin P1, gpt-5 #5, opus #16 — во всех трёх аудитах отмечено как одна и та же проблема)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\scoreboard\ScoreboardScreen.kt" lines="57-59" />
 
-- [ ] **14. Настроить backup rules / `allowBackup`**
+- [x] **14. Настроить backup rules / `allowBackup`**
   `android:allowBackup="true"` без явных правил — история матчей, SharedPreferences
   и потенциально каталог скачанной Vosk-модели (~45 МБ, смысла в бэкапе нет) уходят
   в облачный бэкап без разбора.
