@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -43,7 +44,11 @@ class ListeningService : Service() {
         super.onCreate()
         createChannel()
         stateJob = scope.launch {
-            controller.state.collect { refreshNotification() }
+            controller.state
+                .distinctUntilChanged { old, new ->
+                    old.scoreText == new.scoreText && old.paused == new.paused
+                }
+                .collect { refreshNotification() }
         }
     }
 

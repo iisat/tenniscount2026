@@ -299,7 +299,6 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         } else if (_uiState.value.micState == MicState.LISTENING) {
             SignalPlayer.setKeepAlive(true)
         }
-        controller.setPausedMatch(newPaused)
     }
 
     fun finishMatch() {
@@ -389,7 +388,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         // нажатия в INSTALLING/PREPARING).
         _uiState.update { it.copy(warning = null, micState = MicState.PREPARING) }
         controller.setScoreText(currentScoreText())
-        controller.setPausedMatch(_uiState.value.paused)
+        controller.setPaused(_uiState.value.paused)
         ContextCompat.startForegroundService(
             context,
             ListeningService.startIntent(context),

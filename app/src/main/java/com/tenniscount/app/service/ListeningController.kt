@@ -145,16 +145,12 @@ class ListeningController private constructor(context: Context) {
     fun setPaused(paused: Boolean) {
         AppLog.i(TAG, "setPaused: $paused")
         recognizer.setPaused(paused)
+        _state.update { it.copy(paused = paused) }
     }
 
     /** Обновляет текст счёта в общем состоянии (уведомление подхватит сервис). */
     fun setScoreText(text: String) {
         _state.update { it.copy(scoreText = text) }
-    }
-
-    /** Обновляет флаг паузы матча в общем состоянии (уведомление подхватит сервис). */
-    fun setPausedMatch(paused: Boolean) {
-        _state.update { it.copy(paused = paused) }
     }
 
     fun stop() {
