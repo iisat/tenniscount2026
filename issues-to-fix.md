@@ -224,7 +224,7 @@
   (devin P2)
   <ref_snippet file="C:\projects\tenniscount2026\app\src\main\java\com\tenniscount\app\ui\SignalPlayer.kt" lines="91-97" />
 
-- [ ] **16. Мелочи в `SignalPlayer`**
+- [x] **16. Мелочи в `SignalPlayer`**
   `track.release()` вызывается без предварительного `stop()`; каждый beep создаёт
   отдельную корутину и `AudioTrack` без сериализации — наложение сигналов порождает
   несколько параллельных треков.

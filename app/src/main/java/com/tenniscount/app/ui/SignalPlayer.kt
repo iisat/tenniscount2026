@@ -16,6 +16,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Короткие сигналы подтверждения/отказа. Тоны синтезируются (синус, PCM)
@@ -83,24 +85,33 @@ object SignalPlayer {
     /** Команда отклонена: два низких тона. */
     fun reject(volume: Float) = play(listOf(260 to 120, 0 to 40, 180 to 160), volume)
 
+    /** Сериализует воспроизведение, чтобы параллельные сигналы не накладывались друг на друга. */
+    private val playMutex = Mutex()
+
     /** Сегменты: (частота Гц, длительность мс); частота 0 = пауза. */
     private fun play(segments: List<Pair<Int, Int>>, volume: Float) {
         scope.launch {
-            runCatching {
-                // Тишина в начале: на случай холодного тракта (keep-alive выключен)
-                // микшер срезает первые миллисекунды, пока открывает путь вывода.
-                val leadMs = 60
-                val samples = synthesize(listOf(0 to leadMs) + segments, volume)
-                val minBuffer = AudioTrack.getMinBufferSize(
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                )
-                val track = buildTrack(maxOf(samples.size * 2, minBuffer), AudioTrack.MODE_STATIC)
-                track.write(samples, 0, samples.size)
-                track.play()
-                delay(segments.sumOf { it.second } + leadMs + 100L)
-                track.release()
+            playMutex.withLock {
+                runCatching {
+                    // Тишина в начале: на случай холодного тракта (keep-alive выключен)
+                    // микшер срезает первые миллисекунды, пока открывает путь вывода.
+                    val leadMs = 60
+                    val samples = synthesize(listOf(0 to leadMs) + segments, volume)
+                    val minBuffer = AudioTrack.getMinBufferSize(
+                        SAMPLE_RATE,
+                        AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                    )
+                    val track = buildTrack(maxOf(samples.size * 2, minBuffer), AudioTrack.MODE_STATIC)
+                    try {
+                        track.write(samples, 0, samples.size)
+                        track.play()
+                        delay(segments.sumOf { it.second } + leadMs + 100L)
+                    } finally {
+                        runCatching { track.stop() }
+                        track.release()
+                    }
+                }
             }
         }
     }
