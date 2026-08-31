@@ -74,7 +74,8 @@ object TelegramApi {
     }
 
     /**
-     * Проверяет токен бота и доступность чата.
+     * Проверяет токен бота и возможность публиковать сообщения в чат.
+     * Последовательность: getMe (токен + id бота), getChatMember (права бота в чате).
      * Не логирует токен и не включает его в возвращаемый результат.
      */
     suspend fun checkConnection(token: String, chatId: String): TelegramCheckResult =
@@ -84,21 +85,27 @@ object TelegramApi {
             }
 
             val meResponse = getMe(token)
-            val meResult = parseCheckResponse(meResponse, isChatCheck = false)
-            if (meResult != TelegramCheckResult.Connected) {
-                return@withContext meResult
+            val meJson = meResponse?.let { parseJson(it) }
+                ?: return@withContext TelegramCheckResult.NetworkError
+            if (!meJson.optBoolean("ok", false)) {
+                return@withContext parseCheckResponse(meResponse, isChatCheck = false)
             }
+            val botId = meJson.optJSONObject("result")?.optLong("id", 0L)?.takeIf { it > 0 }
+                ?: return@withContext TelegramCheckResult.NetworkError
 
-            val chatResponse = getChat(token, chatId)
-            parseCheckResponse(chatResponse, isChatCheck = true)
+            val memberResponse = getChatMember(token, chatId, botId)
+            parseChatMemberResult(memberResponse)
         }
 
     private fun getMe(token: String): String? =
         get(URL("https://api.telegram.org/bot$token/getMe"))
 
-    private fun getChat(token: String, chatId: String): String? {
-        val url = URL("https://api.telegram.org/bot$token/getChat")
-        val body = JSONObject().apply { put("chat_id", chatId) }
+    private fun getChatMember(token: String, chatId: String, userId: Long): String? {
+        val url = URL("https://api.telegram.org/bot$token/getChatMember")
+        val body = JSONObject().apply {
+            put("chat_id", chatId)
+            put("user_id", userId)
+        }
         return post(url, body.toString())
     }
 
@@ -136,6 +143,44 @@ object TelegramApi {
         }
     }
 
+    /**
+     * Преобразует ответ getChatMember в результат проверки прав на публикацию.
+     * Доступно для unit-тестов.
+     */
+    internal fun parseChatMemberResult(response: String?): TelegramCheckResult {
+        if (response == null) return TelegramCheckResult.NetworkError
+        val json = parseJson(response) ?: return TelegramCheckResult.NetworkError
+        if (!json.optBoolean("ok", false)) {
+            val description = json.optString("description", "")
+            val errorCode = json.optInt("error_code", 0)
+            return mapCheckResult(ok = false, errorCode, description, isChatCheck = true)
+        }
+        val member = json.optJSONObject("result") ?: return TelegramCheckResult.NetworkError
+        val status = member.optString("status", "")
+        val canPost = member.optBoolean("can_post_messages", false)
+        val canSend = member.optBoolean("can_send_messages", false)
+        return if (canPublish(status, canPost, canSend)) {
+            TelegramCheckResult.Connected
+        } else {
+            TelegramCheckResult.ChatError
+        }
+    }
+
+    /**
+     * Чистая функция проверки прав ChatMember на отправку сообщений.
+     * Доступно для unit-тестов.
+     */
+    internal fun canPublish(
+        status: String,
+        canPostMessages: Boolean,
+        canSendMessages: Boolean,
+    ): Boolean = when (status.lowercase()) {
+        "administrator" -> canPostMessages || canSendMessages
+        "member", "creator" -> true
+        "restricted" -> canSendMessages
+        else -> false
+    }
+
     private fun isUnauthorized(description: String, errorCode: Int): Boolean =
         errorCode == 401 || description.contains("unauthorized")
 
@@ -148,6 +193,8 @@ object TelegramApi {
             description.contains("blocked") ||
             description.contains("kicked") ||
             description.contains("not a member") ||
+            description.contains("user not found") ||
+            description.contains("not enough rights") ||
             description.contains("forbidden")
 
     private fun get(url: URL): String? = runCatching {

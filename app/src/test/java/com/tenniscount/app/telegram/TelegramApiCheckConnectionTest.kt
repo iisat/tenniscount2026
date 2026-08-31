@@ -1,6 +1,8 @@
 package com.tenniscount.app.telegram
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TelegramApiCheckConnectionTest {
@@ -67,5 +69,46 @@ class TelegramApiCheckConnectionTest {
             TelegramCheckResult.NetworkError,
             TelegramApi.mapCheckResult(ok = false, errorCode = 500, description = "Internal Server Error", isChatCheck = true),
         )
+    }
+
+    @Test
+    fun `channel administrator with post permission can publish`() {
+        assertTrue(TelegramApi.canPublish("administrator", true, false))
+    }
+
+    @Test
+    fun `channel administrator without post permission cannot publish`() {
+        assertFalse(TelegramApi.canPublish("administrator", false, false))
+    }
+
+    @Test
+    fun `group administrator with send permission can publish`() {
+        assertTrue(TelegramApi.canPublish("administrator", false, true))
+    }
+
+    @Test
+    fun `regular member can publish`() {
+        assertTrue(TelegramApi.canPublish("member", false, false))
+    }
+
+    @Test
+    fun `creator can publish`() {
+        assertTrue(TelegramApi.canPublish("creator", false, false))
+    }
+
+    @Test
+    fun `restricted user without send permission cannot publish`() {
+        assertFalse(TelegramApi.canPublish("restricted", false, false))
+    }
+
+    @Test
+    fun `restricted user with send permission can publish`() {
+        assertTrue(TelegramApi.canPublish("restricted", false, true))
+    }
+
+    @Test
+    fun `left or kicked member cannot publish`() {
+        assertFalse(TelegramApi.canPublish("left", false, false))
+        assertFalse(TelegramApi.canPublish("kicked", false, false))
     }
 }

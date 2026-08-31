@@ -676,7 +676,17 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(telegramCheckStatus = TelegramCheckResult.Checking) }
         viewModelScope.launch(Dispatchers.IO) {
             val result = TelegramApi.checkConnection(s.telegramToken, s.telegramChatId)
-            _uiState.update { it.copy(telegramCheckStatus = result) }
+            _uiState.update { current ->
+                if (
+                    current.telegramEnabled == s.telegramEnabled &&
+                    current.telegramToken == s.telegramToken &&
+                    current.telegramChatId == s.telegramChatId
+                ) {
+                    current.copy(telegramCheckStatus = result)
+                } else {
+                    current
+                }
+            }
         }
     }
 
