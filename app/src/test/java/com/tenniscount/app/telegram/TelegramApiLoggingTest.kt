@@ -1,11 +1,23 @@
 package com.tenniscount.app.telegram
 
 import java.net.SocketTimeoutException
+import java.net.URL
+import java.net.URLConnection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class TelegramApiLoggingTest {
+
+    @Test
+    fun `connection has finite connect and read timeouts`() {
+        val connection = TestUrlConnection()
+
+        TelegramApi.configureTimeouts(connection)
+
+        assertEquals(10_000, connection.connectTimeout)
+        assertEquals(15_000, connection.readTimeout)
+    }
 
     @Test
     fun `request failure message excludes exception details containing token`() {
@@ -32,5 +44,9 @@ class TelegramApiLoggingTest {
 
         assertEquals("Telegram API error: Unauthorized for bot[redacted]", message)
         assertFalse(message.contains(token))
+    }
+
+    private class TestUrlConnection : URLConnection(URL("https://example.com")) {
+        override fun connect() = Unit
     }
 }

@@ -71,7 +71,7 @@ Telegram API error: Unauthorized
 
 ---
 
-### [ ] 3. Добавить HTTP connect/read timeout
+### [x] 3. Добавить HTTP connect/read timeout
 
 **Проблема**
 
@@ -92,12 +92,12 @@ connection.readTimeout = 15_000
 
 **Acceptance criteria**
 
-- [ ] Connect timeout задан.
-- [ ] Read timeout задан.
-- [ ] Request не может зависнуть бесконечно.
-- [ ] Timeout не влияет на локальный матч.
-- [ ] После timeout следующая публикация может выполниться.
-- [ ] Mutex гарантированно освобождается.
+- [x] Connect timeout задан.
+- [x] Read timeout задан.
+- [x] Request не может зависнуть бесконечно.
+- [x] Timeout не влияет на локальный матч.
+- [x] После timeout следующая публикация может выполниться.
+- [x] Mutex гарантированно освобождается.
 
 ---
 
@@ -353,7 +353,7 @@ publisher.reset()
 
 1. [x] Защитить bot token и убрать из backup.
 2. [x] Исключить token из logging.
-3. [ ] Добавить HTTP timeout.
+3. [x] Добавить HTTP timeout.
 4. [ ] Исправить sequencing/session race.
 5. [ ] Исправить restore после process death.
 6. [ ] Сделать безопасный переход между live messages.
@@ -370,7 +370,7 @@ publisher.reset()
 - [ ] Все P1 закрыты.
 - [x] Bot token не попадает в backup.
 - [x] Bot token не попадает в release logcat.
-- [ ] Все HTTP requests имеют timeout.
+- [x] Все HTTP requests имеют timeout.
 - [ ] Telegram API failure не влияет на локальный матч.
 - [ ] Finish — последнее Telegram-событие матча.
 - [ ] New Match инвалидирует старую Telegram-session.

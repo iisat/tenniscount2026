@@ -4,6 +4,7 @@ import com.tenniscount.app.util.AppLog
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.URL
+import java.net.URLConnection
 import javax.net.ssl.HttpsURLConnection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -75,6 +76,7 @@ object TelegramApi {
     private fun post(url: URL, body: String): String? = runCatching {
         val conn = url.openConnection() as HttpsURLConnection
         try {
+            configureTimeouts(conn)
             conn.requestMethod = "POST"
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
@@ -95,6 +97,11 @@ object TelegramApi {
     }.onFailure {
         AppLog.w(TAG, "Telegram response parse failed: ${it.javaClass.simpleName}")
     }.getOrNull()
+
+    internal fun configureTimeouts(connection: URLConnection) {
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 15_000
+    }
 
     internal fun requestFailureMessage(error: Throwable): String =
         "Telegram request failed: ${error.javaClass.simpleName.ifBlank { "Throwable" }}"
