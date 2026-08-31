@@ -101,7 +101,7 @@ connection.readTimeout = 15_000
 
 ---
 
-### [ ] 4. Устранить race между score update, Finish Match и New Match
+### [x] 4. Устранить race между score update, Finish Match и New Match
 
 **Проблема**
 
@@ -150,12 +150,12 @@ Reset
 
 **Acceptance criteria**
 
-- [ ] Live update не может появиться после final message.
-- [ ] Старый матч не может изменить Telegram state нового матча.
-- [ ] `messageId` принадлежит только текущей session.
-- [ ] Rapid updates выполняются в определённом порядке.
-- [ ] Finish всегда является последним событием завершённого матча.
-- [ ] Есть concurrency regression tests.
+- [x] Live update не может появиться после final message.
+- [x] Старый матч не может изменить Telegram state нового матча.
+- [x] `messageId` принадлежит только текущей session.
+- [x] Rapid updates выполняются в определённом порядке.
+- [x] Finish всегда является последним событием завершённого матча.
+- [x] Есть concurrency regression tests.
 
 ---
 
@@ -305,9 +305,9 @@ interface TelegramClient {
 - [ ] restore mid-game → первое изменение создаёт новый message;
 - [ ] failed send не продвигает state;
 - [ ] failed edit можно повторить;
-- [ ] rapid updates сохраняют порядок;
-- [ ] Finish при queued update остаётся последним;
-- [ ] New Match инвалидирует operations старого матча;
+- [x] rapid updates сохраняют порядок;
+- [x] Finish при queued update остаётся последним;
+- [x] New Match инвалидирует operations старого матча;
 - [ ] final formatter корректен при незавершённом текущем сете;
 - [ ] Telegram disabled → 0 API calls.
 
@@ -354,7 +354,7 @@ publisher.reset()
 1. [x] Защитить bot token и убрать из backup.
 2. [x] Исключить token из logging.
 3. [x] Добавить HTTP timeout.
-4. [ ] Исправить sequencing/session race.
+4. [x] Исправить sequencing/session race.
 5. [ ] Исправить restore после process death.
 6. [ ] Сделать безопасный переход между live messages.
 7. [ ] Добавить FakeTelegramClient и regression tests.
@@ -372,8 +372,8 @@ publisher.reset()
 - [x] Bot token не попадает в release logcat.
 - [x] Все HTTP requests имеют timeout.
 - [ ] Telegram API failure не влияет на локальный матч.
-- [ ] Finish — последнее Telegram-событие матча.
-- [ ] New Match инвалидирует старую Telegram-session.
+- [x] Finish — последнее Telegram-событие матча.
+- [x] New Match инвалидирует старую Telegram-session.
 - [ ] Process restart корректно восстанавливает публикацию.
 - [ ] Network failure не приводит к необратимой потере live session.
 - [ ] Есть автоматические тесты Telegram state machine.
