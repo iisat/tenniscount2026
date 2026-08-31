@@ -356,7 +356,11 @@ publisher.reset()
 3. [x] Добавить HTTP timeout.
 4. [x] Исправить sequencing/session race.
 5. [x] Исправить restore после process death.
+<<<<<<< HEAD
 6. [x] Сделать безопасный переход между live messages.
+=======
+6. [ ] Сделать безопасный переход между live messages.
+>>>>>>> 80641b8b1594691d4a3dd263baa333140e92cc2a
 7. [ ] Добавить FakeTelegramClient и regression tests.
 8. [ ] Добавить UI проверки/status.
 9. [ ] Завершить вынос `TelegramScorePublisher`, если он не был сделан в рамках #4–#6.
@@ -375,7 +379,11 @@ publisher.reset()
 - [x] Finish — последнее Telegram-событие матча.
 - [x] New Match инвалидирует старую Telegram-session.
 - [x] Process restart корректно восстанавливает публикацию.
+<<<<<<< HEAD
 - [x] Network failure не приводит к необратимой потере live session.
+=======
+- [ ] Network failure не приводит к необратимой потере live session.
+>>>>>>> 80641b8b1594691d4a3dd263baa333140e92cc2a
 - [ ] Есть автоматические тесты Telegram state machine.
 - [ ] Выполнен smoke test на физическом Android-устройстве.
 
