@@ -6,26 +6,37 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.tenniscount.app.R
 import com.tenniscount.app.score.Player
+import com.tenniscount.app.telegram.TelegramCheckResult
 import com.tenniscount.app.ui.MatchUiState
 import com.tenniscount.app.ui.MatchViewModel
 
 @Composable
 fun MatchSetupScreen(state: MatchUiState, viewModel: MatchViewModel) {
+    val tokenVisible = remember { mutableStateOf(false) }
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
     ) {
         Text(
@@ -67,6 +78,66 @@ fun MatchSetupScreen(state: MatchUiState, viewModel: MatchViewModel) {
             }
         }
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.telegram_title),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Switch(
+                checked = state.telegramEnabled,
+                onCheckedChange = viewModel::setTelegramEnabled,
+            )
+        }
+
+        if (state.telegramEnabled) {
+            OutlinedTextField(
+                value = state.telegramToken,
+                onValueChange = viewModel::setTelegramToken,
+                label = { Text(stringResource(R.string.telegram_token_label)) },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge,
+                visualTransformation = if (tokenVisible.value) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    TextButton(onClick = { tokenVisible.value = !tokenVisible.value }) {
+                        Text(if (tokenVisible.value) "Скрыть" else "Показать")
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = state.telegramChatId,
+                onValueChange = viewModel::setTelegramChatId,
+                label = { Text(stringResource(R.string.telegram_chat_id_label)) },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            val status = telegramStatusText(state.telegramCheckStatus)
+            if (status != null) {
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = telegramStatusColor(state.telegramCheckStatus),
+                )
+            }
+
+            OutlinedButton(
+                onClick = viewModel::checkTelegram,
+                enabled = state.telegramToken.isNotBlank() &&
+                    state.telegramChatId.isNotBlank() &&
+                    state.telegramCheckStatus != TelegramCheckResult.Checking,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.telegram_check))
+            }
+        }
+
         Button(
             onClick = viewModel::startMatch,
             enabled = state.player1Name.isNotBlank() && state.player2Name.isNotBlank(),
@@ -89,4 +160,24 @@ fun MatchSetupScreen(state: MatchUiState, viewModel: MatchViewModel) {
             )
         }
     }
+}
+
+@Composable
+private fun telegramStatusText(status: TelegramCheckResult): String? = when (status) {
+    TelegramCheckResult.NotConfigured -> stringResource(R.string.telegram_status_not_configured)
+    TelegramCheckResult.Unchecked -> null
+    TelegramCheckResult.Checking -> stringResource(R.string.telegram_status_checking)
+    TelegramCheckResult.Connected -> stringResource(R.string.telegram_status_connected)
+    TelegramCheckResult.AuthError -> stringResource(R.string.telegram_status_auth_error)
+    TelegramCheckResult.ChatError -> stringResource(R.string.telegram_status_chat_error)
+    TelegramCheckResult.NetworkError -> stringResource(R.string.telegram_status_network_error)
+}
+
+@Composable
+private fun telegramStatusColor(status: TelegramCheckResult) = when (status) {
+    TelegramCheckResult.Connected -> androidx.compose.ui.graphics.Color(0xFF2E7D32)
+    TelegramCheckResult.AuthError,
+    TelegramCheckResult.ChatError,
+    TelegramCheckResult.NetworkError -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.onSurface
 }

@@ -3,6 +3,7 @@ package com.tenniscount.app.ui
 import android.Manifest
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -14,6 +15,8 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tenniscount.app.data.FinishedMatchEntity
@@ -33,6 +36,10 @@ import com.tenniscount.app.service.MicState
 import com.tenniscount.app.speech.ScoreParser
 import com.tenniscount.app.speech.VoiceCommand
 import com.tenniscount.app.speech.VoskRecognizer
+import com.tenniscount.app.telegram.TelegramApi
+import com.tenniscount.app.telegram.TelegramApiClient
+import com.tenniscount.app.telegram.TelegramCheckResult
+import com.tenniscount.app.telegram.TelegramScorePublisher
 import com.tenniscount.app.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -77,6 +84,14 @@ data class MatchUiState(
     val speakSetEnd: Boolean = true,
     /** Проверять объявленный счёт на противоречия текущему (иначе применять любой). */
     val strictValidation: Boolean = true,
+    /** Транслировать счёт в Telegram. */
+    val telegramEnabled: Boolean = false,
+    /** Токен Telegram-бота. */
+    val telegramToken: String = "",
+    /** ID группы/канала для публикации. */
+    val telegramChatId: String = "",
+    /** Состояние проверки подключения к Telegram. */
+    val telegramCheckStatus: TelegramCheckResult = TelegramCheckResult.NotConfigured,
 ) {
     fun name(player: Player): String = when (player) {
         Player.ONE -> player1Name
@@ -87,20 +102,63 @@ data class MatchUiState(
 class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val secretsPrefs: SharedPreferences? = run {
+        val legacy = prefs.getString(KEY_TELEGRAM_TOKEN, null)
+        runCatching {
+            val masterKey = MasterKey.Builder(application, TELEGRAM_MASTER_KEY_ALIAS)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            val encrypted = EncryptedSharedPreferences.create(
+                application,
+                TELEGRAM_PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+            if (legacy != null && encrypted.getString(KEY_TELEGRAM_TOKEN, null).isNullOrBlank()) {
+                encrypted.edit { putString(KEY_TELEGRAM_TOKEN, legacy) }
+                prefs.edit { remove(KEY_TELEGRAM_TOKEN) }
+            }
+            encrypted
+        }.onFailure {
+            prefs.edit { remove(KEY_TELEGRAM_TOKEN) }
+            AppLog.e(TAG, "telegram secrets unavailable: ${it.javaClass.simpleName}")
+        }.getOrNull()
+    }
 
     private val _uiState = MutableStateFlow(
-        // coerceIn: в старых версиях диапазон был 1.5–2.5 — значение подтягивается к 1.0–2.0.
-        MatchUiState(
-            player1Name = prefs.getString(KEY_PLAYER1_NAME, null) ?: "Игрок 1",
-            player2Name = prefs.getString(KEY_PLAYER2_NAME, null) ?: "Игрок 2",
-            firstServer = prefs.getString(KEY_FIRST_SERVER, null)
-                ?.let { runCatching { Player.valueOf(it) }.getOrNull() } ?: Player.ONE,
-            signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 2f).coerceIn(1f, 2f),
-            speakGameEnd = prefs.getBoolean(KEY_SPEAK_GAME_END, true),
-            speakSetPoint = prefs.getBoolean(KEY_SPEAK_SET_POINT, true),
-            speakSetEnd = prefs.getBoolean(KEY_SPEAK_SET_END, true),
-            strictValidation = prefs.getBoolean(KEY_STRICT_VALIDATION, true),
-        ),
+        run {
+            val telegramEnabled = prefs.getBoolean(KEY_TELEGRAM_ENABLED, false)
+            val telegramToken = runCatching {
+                secretsPrefs?.getString(KEY_TELEGRAM_TOKEN, null)
+            }.onFailure {
+                AppLog.e(TAG, "telegram token unavailable: ${it.javaClass.simpleName}")
+            }.getOrNull() ?: ""
+            val telegramChatId = prefs.getString(KEY_TELEGRAM_CHAT_ID, null) ?: ""
+            val telegramCheckStatus = if (
+                telegramEnabled && telegramToken.isNotBlank() && telegramChatId.isNotBlank()
+            ) {
+                TelegramCheckResult.Unchecked
+            } else {
+                TelegramCheckResult.NotConfigured
+            }
+            // coerceIn: в старых версиях диапазон был 1.5–2.5 — значение подтягивается к 1.0–2.0.
+            MatchUiState(
+                player1Name = prefs.getString(KEY_PLAYER1_NAME, null) ?: "Игрок 1",
+                player2Name = prefs.getString(KEY_PLAYER2_NAME, null) ?: "Игрок 2",
+                firstServer = prefs.getString(KEY_FIRST_SERVER, null)
+                    ?.let { runCatching { Player.valueOf(it) }.getOrNull() } ?: Player.ONE,
+                signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 2f).coerceIn(1f, 2f),
+                speakGameEnd = prefs.getBoolean(KEY_SPEAK_GAME_END, true),
+                speakSetPoint = prefs.getBoolean(KEY_SPEAK_SET_POINT, true),
+                speakSetEnd = prefs.getBoolean(KEY_SPEAK_SET_END, true),
+                strictValidation = prefs.getBoolean(KEY_STRICT_VALIDATION, true),
+                telegramEnabled = telegramEnabled,
+                telegramToken = telegramToken,
+                telegramChatId = telegramChatId,
+                telegramCheckStatus = telegramCheckStatus,
+            )
+        },
     )
     val uiState: StateFlow<MatchUiState> = _uiState.asStateFlow()
 
@@ -111,6 +169,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Последнее записанное в prefs состояние — чтобы не переписывать его без изменений. */
     private var lastPersistedState: String? = null
+
+    private val telegramPublisher = TelegramScorePublisher(TelegramApiClient)
 
     private val controller = ListeningController.get(application)
     private val db = MatchDatabase.get(application)
@@ -256,6 +316,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         engine = MatchEngine(_uiState.value.firstServer)
             .also { it.strictValidation = _uiState.value.strictValidation }
         lastSyncedState = null
+        telegramPublisher.startSession()
         sync(screen = Screen.SCOREBOARD)
     }
 
@@ -307,6 +368,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         stopListening()
         if (state != null) {
             saveMatch(state, s.player1Name, s.player2Name)
+            val operation = telegramPublisher.finish(s.telegramConfiguration(), state)
+            viewModelScope.launch(Dispatchers.IO) { operation() }
         }
         // Матч завершён — сохранённый слепок больше не нужен.
         clearPersistedMatch()
@@ -319,6 +382,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val s = _uiState.value
         engine = null
         lastSyncedState = null
+        telegramPublisher.startSession()
         clearPersistedMatch()
         _uiState.value = MatchUiState(
             player1Name = s.player1Name,
@@ -329,6 +393,10 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             speakSetPoint = s.speakSetPoint,
             speakSetEnd = s.speakSetEnd,
             strictValidation = s.strictValidation,
+            telegramEnabled = s.telegramEnabled,
+            telegramToken = s.telegramToken,
+            telegramChatId = s.telegramChatId,
+            telegramCheckStatus = s.telegramCheckStatus,
         )
     }
 
@@ -554,6 +622,70 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         engine?.strictValidation = enabled
     }
 
+    fun setTelegramEnabled(enabled: Boolean) {
+        _uiState.update {
+            it.copy(
+                telegramEnabled = enabled,
+                telegramCheckStatus = TelegramCheckResult.Unchecked,
+            )
+        }
+        prefs.edit { putBoolean(KEY_TELEGRAM_ENABLED, enabled) }
+    }
+
+    fun setTelegramToken(token: String) {
+        val trimmed = token.trim()
+        _uiState.update {
+            it.copy(
+                telegramToken = trimmed,
+                telegramCheckStatus = TelegramCheckResult.Unchecked,
+            )
+        }
+        secretsPrefs?.let { encrypted ->
+            runCatching { encrypted.edit { putString(KEY_TELEGRAM_TOKEN, trimmed) } }
+                .onFailure {
+                    AppLog.e(TAG, "telegram token save failed: ${it.javaClass.simpleName}")
+                }
+        }
+    }
+
+    fun setTelegramChatId(chatId: String) {
+        val trimmed = chatId.trim()
+        _uiState.update {
+            it.copy(
+                telegramChatId = trimmed,
+                telegramCheckStatus = TelegramCheckResult.Unchecked,
+            )
+        }
+        prefs.edit { putString(KEY_TELEGRAM_CHAT_ID, trimmed) }
+    }
+
+    /**
+     * Проверяет токен и доступ к чату Telegram. Результат попадает в UI state.
+     * Не блокирует начало матча: вызывается только по кнопке.
+     */
+    fun checkTelegram() {
+        val s = _uiState.value
+        if (!s.telegramEnabled || s.telegramToken.isBlank() || s.telegramChatId.isBlank()) {
+            _uiState.update { it.copy(telegramCheckStatus = TelegramCheckResult.NotConfigured) }
+            return
+        }
+        _uiState.update { it.copy(telegramCheckStatus = TelegramCheckResult.Checking) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = TelegramApi.checkConnection(s.telegramToken, s.telegramChatId)
+            _uiState.update { current ->
+                if (
+                    current.telegramEnabled == s.telegramEnabled &&
+                    current.telegramToken == s.telegramToken &&
+                    current.telegramChatId == s.telegramChatId
+                ) {
+                    current.copy(telegramCheckStatus = result)
+                } else {
+                    current
+                }
+            }
+        }
+    }
+
     /**
      * Озвучка через on-device TTS. [enqueue] = true — фраза встаёт в очередь
      * следом за уже звучащей (например, «сет-поинт» после счёта гейма).
@@ -728,6 +860,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         }
         persistCurrentMatch()
         controller.setScoreText(currentScoreText())
+        triggerTelegramUpdate()
     }
 
     // --- Персистентность незавершённого матча ---
@@ -773,6 +906,9 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         // Сигналы о переходах сравнивают с lastSyncedState: восстановленное
         // состояние не должно вызывать звонок гейма/сета при первом sync().
         lastSyncedState = state
+        // Telegram-публикация не восстанавливается: при следующем изменении
+        // будет отправлено новое сообщение, т.к. старое message_id не сохраняется.
+        telegramPublisher.startSession()
         // И оно уже лежит в prefs — первый sync() после рестарта не должен
         // перезаписывать файл настроек тем же значением.
         lastPersistedState = saved
@@ -821,14 +957,38 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Публикует или обновляет сообщение со счётом в Telegram.
+     * Внутри гейма — редактируется; при переходе гейма/сета — удаляется
+     * и создаётся новое (чтобы пришло уведомление).
+     */
+    private fun triggerTelegramUpdate() {
+        val state = engine?.state ?: return
+        val operation = telegramPublisher.liveUpdate(_uiState.value.telegramConfiguration(), state)
+        viewModelScope.launch(Dispatchers.IO) { operation() }
+    }
+
+    private fun MatchUiState.telegramConfiguration() = TelegramScorePublisher.Configuration(
+        enabled = telegramEnabled,
+        token = telegramToken,
+        chatId = telegramChatId,
+        player1Name = player1Name,
+        player2Name = player2Name,
+    )
+
     private companion object {
         const val TAG = "MatchViewModel"
         const val PREFS_NAME = "settings"
+        const val TELEGRAM_PREFS_NAME = "telegram_secrets"
+        const val TELEGRAM_MASTER_KEY_ALIAS = "telegram_master_key"
         const val KEY_SIGNAL_VOLUME = "signal_volume"
         const val KEY_SPEAK_GAME_END = "speak_game_end"
         const val KEY_SPEAK_SET_POINT = "speak_set_point"
         const val KEY_SPEAK_SET_END = "speak_set_end"
         const val KEY_STRICT_VALIDATION = "strict_validation"
+        const val KEY_TELEGRAM_ENABLED = "telegram_enabled"
+        const val KEY_TELEGRAM_TOKEN = "telegram_token"
+        const val KEY_TELEGRAM_CHAT_ID = "telegram_chat_id"
         const val KEY_PLAYER1_NAME = "player1_name"
         const val KEY_PLAYER2_NAME = "player2_name"
         const val KEY_FIRST_SERVER = "first_server"

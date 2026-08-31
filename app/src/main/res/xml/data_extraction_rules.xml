@@ -2,12 +2,14 @@
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="settings.xml" />
+        <exclude domain="sharedpref" path="telegram_secrets.xml" />
         <include domain="database" path="tenniscount.db" />
         <exclude domain="file" path="model-ru/" />
         <exclude domain="file" path="model-ru.staging/" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="settings.xml" />
+        <exclude domain="sharedpref" path="telegram_secrets.xml" />
         <include domain="database" path="tenniscount.db" />
         <exclude domain="file" path="model-ru/" />
         <exclude domain="file" path="model-ru.staging/" />
