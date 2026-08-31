@@ -6,7 +6,7 @@
 
 ## P1 — исправить до merge
 
-### [ ] 1. Не хранить Telegram bot token в backup-able `settings.xml`
+### [x] 1. Не хранить Telegram bot token в backup-able `settings.xml`
 
 **Проблема**
 
@@ -24,12 +24,12 @@ Bot token является credential и не должен попадать в b
 
 **Acceptance criteria**
 
-- [ ] Token не хранится в `settings.xml`.
-- [ ] Token не попадает в Cloud Backup.
-- [ ] Token не попадает в device transfer.
-- [ ] Token скрыт в UI по умолчанию.
-- [ ] Перезапуск приложения сохраняет token локально.
-- [ ] Остальные настройки продолжают backup/restore как раньше.
+- [x] Token не хранится в `settings.xml`.
+- [x] Token не попадает в Cloud Backup.
+- [x] Token не попадает в device transfer.
+- [x] Token скрыт в UI по умолчанию.
+- [x] Перезапуск приложения сохраняет token локально.
+- [x] Остальные настройки продолжают backup/restore как раньше.
 
 ---
 
@@ -351,7 +351,7 @@ publisher.reset()
 
 # Suggested implementation order
 
-1. [ ] Защитить bot token и убрать из backup.
+1. [x] Защитить bot token и убрать из backup.
 2. [ ] Исключить token из logging.
 3. [ ] Добавить HTTP timeout.
 4. [ ] Исправить sequencing/session race.
@@ -368,7 +368,7 @@ publisher.reset()
 Перед merge `feature/telegram_count_publish` → `develop`:
 
 - [ ] Все P1 закрыты.
-- [ ] Bot token не попадает в backup.
+- [x] Bot token не попадает в backup.
 - [ ] Bot token не попадает в release logcat.
 - [ ] Все HTTP requests имеют timeout.
 - [ ] Telegram API failure не влияет на локальный матч.
