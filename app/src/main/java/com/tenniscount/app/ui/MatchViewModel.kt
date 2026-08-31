@@ -352,8 +352,15 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         stopListening()
         if (state != null) {
             saveMatch(state, s.player1Name, s.player2Name)
-            val ticket = telegramSequencer.nextSession()
-            publishFinal(state, s.player1Name, s.player2Name, ticket)
+            val telegramConfigured =
+                s.telegramEnabled && s.telegramToken.isNotBlank() && s.telegramChatId.isNotBlank()
+            if (telegramConfigured) {
+                val oldMessageId = telegramMessageId
+                val ticket = telegramSequencer.nextFinalSession()
+                publishFinal(state, s.player1Name, s.player2Name, oldMessageId, ticket)
+            } else {
+                telegramSequencer.nextSession()
+            }
         }
         // Матч завершён — сохранённый слепок больше не нужен.
         clearPersistedMatch()
@@ -941,16 +948,15 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         state: MatchState,
         player1Name: String,
         player2Name: String,
+        oldMessageId: Int?,
         ticket: TelegramOperationSequencer.Ticket,
     ) {
         val s = _uiState.value
-        if (!s.telegramEnabled || s.telegramToken.isBlank() || s.telegramChatId.isBlank()) return
         val token = s.telegramToken
         val chatId = s.telegramChatId
         viewModelScope.launch(Dispatchers.IO) {
             telegramSequencer.execute(ticket) {
-                val oldId = telegramMessageId
-                if (oldId != null) TelegramApi.deleteMessage(token, chatId, oldId)
+                if (oldMessageId != null) TelegramApi.deleteMessage(token, chatId, oldMessageId)
                 val text = TelegramScoreFormatter.finalMessage(state, player1Name, player2Name)
                 TelegramApi.sendMessage(token, chatId, text)
                 telegramSequencer.commitIfCurrent(ticket) {

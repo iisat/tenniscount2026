@@ -1,6 +1,7 @@
 package com.tenniscount.app.telegram
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -16,7 +17,7 @@ class TelegramOperationSequencerTest {
         val sequencer = TelegramOperationSequencer()
         sequencer.nextSession()
         val live = sequencer.nextOperation()
-        val final = sequencer.nextSession()
+        val final = sequencer.nextFinalSession()
         val events = mutableListOf<String>()
 
         val liveExecuted = sequencer.execute(live) { events += "live" }
@@ -25,6 +26,30 @@ class TelegramOperationSequencerTest {
         assertFalse(liveExecuted)
         assertTrue(finalExecuted)
         assertEquals(listOf("final"), events)
+    }
+
+    @Test
+    fun `new match waits for pending final from finished match`() = runBlocking {
+        val sequencer = TelegramOperationSequencer()
+        sequencer.nextSession()
+        val final = sequencer.nextFinalSession()
+        sequencer.nextSession()
+        val newMatchUpdate = sequencer.nextOperation()
+        val events = mutableListOf<String>()
+        val newUpdateStarted = CompletableDeferred<Unit>()
+        val newUpdate = launch(start = CoroutineStart.UNDISPATCHED) {
+            sequencer.execute(newMatchUpdate) {
+                events += "new-live"
+                newUpdateStarted.complete(Unit)
+            }
+        }
+
+        assertFalse(newUpdateStarted.isCompleted)
+        assertTrue(sequencer.execute(final) { events += "final" })
+        newUpdate.join()
+
+        assertTrue(newUpdateStarted.isCompleted)
+        assertEquals(listOf("final", "new-live"), events)
     }
 
     @Test
