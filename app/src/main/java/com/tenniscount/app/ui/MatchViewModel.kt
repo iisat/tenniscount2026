@@ -854,7 +854,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         // Telegram-публикация не восстанавливается: при следующем изменении
         // будет отправлено новое сообщение, т.к. старое message_id не сохраняется.
         telegramMessageId = null
-        lastTelegramState = state
+        lastTelegramState = null
         // И оно уже лежит в prefs — первый sync() после рестарта не должен
         // перезаписывать файл настроек тем же значением.
         lastPersistedState = saved
