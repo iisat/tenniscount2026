@@ -925,19 +925,26 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 val chatId = s.telegramChatId
                 if (gameOrSetChanged) {
                     val oldId = telegramMessageId
-                    if (oldId != null) TelegramApi.deleteMessage(token, chatId, oldId)
                     val text = TelegramScoreFormatter.liveMessage(new, s.player1Name, s.player2Name)
                     val newId = TelegramApi.sendMessage(token, chatId, text)
-                    val committed = telegramSequencer.commitIfCurrent(ticket) {
-                        telegramMessageId = newId
-                        lastTelegramState = new
+                    if (newId != null) {
+                        val committed = telegramSequencer.commitIfCurrent(ticket) {
+                            telegramMessageId = newId
+                            lastTelegramState = new
+                        }
+                        if (committed) {
+                            if (oldId != null) TelegramApi.deleteMessage(token, chatId, oldId)
+                        } else {
+                            TelegramApi.deleteMessage(token, chatId, newId)
+                        }
                     }
-                    if (!committed && newId != null) TelegramApi.deleteMessage(token, chatId, newId)
                 } else {
                     val messageId = telegramMessageId ?: return@execute
                     val text = TelegramScoreFormatter.liveMessage(new, s.player1Name, s.player2Name)
-                    TelegramApi.editMessageText(token, chatId, messageId, text)
-                    telegramSequencer.commitIfCurrent(ticket) { lastTelegramState = new }
+                    val edited = TelegramApi.editMessageText(token, chatId, messageId, text)
+                    if (edited) {
+                        telegramSequencer.commitIfCurrent(ticket) { lastTelegramState = new }
+                    }
                 }
             }
         }
@@ -956,12 +963,14 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val chatId = s.telegramChatId
         viewModelScope.launch(Dispatchers.IO) {
             telegramSequencer.execute(ticket) {
-                if (oldMessageId != null) TelegramApi.deleteMessage(token, chatId, oldMessageId)
                 val text = TelegramScoreFormatter.finalMessage(state, player1Name, player2Name)
-                TelegramApi.sendMessage(token, chatId, text)
-                telegramSequencer.commitIfCurrent(ticket) {
-                    telegramMessageId = null
-                    lastTelegramState = null
+                val sent = TelegramApi.sendMessage(token, chatId, text)
+                if (sent != null) {
+                    telegramSequencer.commitIfCurrent(ticket) {
+                        telegramMessageId = null
+                        lastTelegramState = null
+                    }
+                    if (oldMessageId != null) TelegramApi.deleteMessage(token, chatId, oldMessageId)
                 }
             }
         }
