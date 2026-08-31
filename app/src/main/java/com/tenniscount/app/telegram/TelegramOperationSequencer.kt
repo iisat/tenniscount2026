@@ -26,7 +26,11 @@ internal class TelegramOperationSequencer {
     fun nextOperation(): Ticket = Ticket(session, ++nextSequence)
 
     @Synchronized
-    fun isCurrent(ticket: Ticket): Boolean = ticket.session == session
+    fun commitIfCurrent(ticket: Ticket, block: () -> Unit): Boolean {
+        if (ticket.session != session) return false
+        block()
+        return true
+    }
 
     suspend fun execute(ticket: Ticket, operation: suspend () -> Unit): Boolean = mutex.withLock {
         val shouldExecute = synchronized(this) {

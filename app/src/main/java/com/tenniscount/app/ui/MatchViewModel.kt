@@ -921,18 +921,17 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                     if (oldId != null) TelegramApi.deleteMessage(token, chatId, oldId)
                     val text = TelegramScoreFormatter.liveMessage(new, s.player1Name, s.player2Name)
                     val newId = TelegramApi.sendMessage(token, chatId, text)
-                    if (!telegramSequencer.isCurrent(ticket)) {
-                        if (newId != null) TelegramApi.deleteMessage(token, chatId, newId)
-                        return@execute
+                    val committed = telegramSequencer.commitIfCurrent(ticket) {
+                        telegramMessageId = newId
+                        lastTelegramState = new
                     }
-                    telegramMessageId = newId
+                    if (!committed && newId != null) TelegramApi.deleteMessage(token, chatId, newId)
                 } else {
                     val messageId = telegramMessageId ?: return@execute
                     val text = TelegramScoreFormatter.liveMessage(new, s.player1Name, s.player2Name)
                     TelegramApi.editMessageText(token, chatId, messageId, text)
-                    if (!telegramSequencer.isCurrent(ticket)) return@execute
+                    telegramSequencer.commitIfCurrent(ticket) { lastTelegramState = new }
                 }
-                lastTelegramState = new
             }
         }
     }
@@ -954,9 +953,10 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 if (oldId != null) TelegramApi.deleteMessage(token, chatId, oldId)
                 val text = TelegramScoreFormatter.finalMessage(state, player1Name, player2Name)
                 TelegramApi.sendMessage(token, chatId, text)
-                if (!telegramSequencer.isCurrent(ticket)) return@execute
-                telegramMessageId = null
-                lastTelegramState = null
+                telegramSequencer.commitIfCurrent(ticket) {
+                    telegramMessageId = null
+                    lastTelegramState = null
+                }
             }
         }
     }

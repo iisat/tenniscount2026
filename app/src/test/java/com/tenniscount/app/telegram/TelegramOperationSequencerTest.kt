@@ -1,5 +1,8 @@
 package com.tenniscount.app.telegram
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,6 +38,32 @@ class TelegramOperationSequencerTest {
         val executed = sequencer.execute(oldMatchUpdate) { messageId = 42 }
 
         assertFalse(executed)
+        assertEquals(null, messageId)
+    }
+
+    @Test
+    fun `commit is rejected when session changes after operation starts`() = runBlocking {
+        val sequencer = TelegramOperationSequencer()
+        sequencer.nextSession()
+        val oldUpdate = sequencer.nextOperation()
+        val reachedCommit = CompletableDeferred<Unit>()
+        val releaseCommit = CompletableDeferred<Unit>()
+        var messageId: Int? = null
+        var committed = true
+        val operation = launch(Dispatchers.Default) {
+            sequencer.execute(oldUpdate) {
+                reachedCommit.complete(Unit)
+                releaseCommit.await()
+                committed = sequencer.commitIfCurrent(oldUpdate) { messageId = 42 }
+            }
+        }
+
+        reachedCommit.await()
+        sequencer.nextSession()
+        releaseCommit.complete(Unit)
+        operation.join()
+
+        assertFalse(committed)
         assertEquals(null, messageId)
     }
 
