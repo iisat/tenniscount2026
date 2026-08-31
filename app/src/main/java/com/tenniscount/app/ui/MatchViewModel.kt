@@ -102,29 +102,38 @@ data class MatchUiState(
 class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val secretsPrefs: SharedPreferences = run {
-        val masterKey = MasterKey.Builder(application, TELEGRAM_MASTER_KEY_ALIAS)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        val encrypted = EncryptedSharedPreferences.create(
-            application,
-            TELEGRAM_PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+    private val secretsPrefs: SharedPreferences? = run {
         val legacy = prefs.getString(KEY_TELEGRAM_TOKEN, null)
-        if (legacy != null && encrypted.getString(KEY_TELEGRAM_TOKEN, null).isNullOrBlank()) {
-            encrypted.edit { putString(KEY_TELEGRAM_TOKEN, legacy) }
+        runCatching {
+            val masterKey = MasterKey.Builder(application, TELEGRAM_MASTER_KEY_ALIAS)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            val encrypted = EncryptedSharedPreferences.create(
+                application,
+                TELEGRAM_PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+            if (legacy != null && encrypted.getString(KEY_TELEGRAM_TOKEN, null).isNullOrBlank()) {
+                encrypted.edit { putString(KEY_TELEGRAM_TOKEN, legacy) }
+                prefs.edit { remove(KEY_TELEGRAM_TOKEN) }
+            }
+            encrypted
+        }.onFailure {
             prefs.edit { remove(KEY_TELEGRAM_TOKEN) }
-        }
-        encrypted
+            AppLog.e(TAG, "telegram secrets unavailable: ${it.javaClass.simpleName}")
+        }.getOrNull()
     }
 
     private val _uiState = MutableStateFlow(
         run {
             val telegramEnabled = prefs.getBoolean(KEY_TELEGRAM_ENABLED, false)
-            val telegramToken = secretsPrefs.getString(KEY_TELEGRAM_TOKEN, null) ?: ""
+            val telegramToken = runCatching {
+                secretsPrefs?.getString(KEY_TELEGRAM_TOKEN, null)
+            }.onFailure {
+                AppLog.e(TAG, "telegram token unavailable: ${it.javaClass.simpleName}")
+            }.getOrNull() ?: ""
             val telegramChatId = prefs.getString(KEY_TELEGRAM_CHAT_ID, null) ?: ""
             val telegramCheckStatus = if (
                 telegramEnabled && telegramToken.isNotBlank() && telegramChatId.isNotBlank()
@@ -631,7 +640,12 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
                 telegramCheckStatus = TelegramCheckResult.Unchecked,
             )
         }
-        secretsPrefs.edit { putString(KEY_TELEGRAM_TOKEN, trimmed) }
+        secretsPrefs?.let { encrypted ->
+            runCatching { encrypted.edit { putString(KEY_TELEGRAM_TOKEN, trimmed) } }
+                .onFailure {
+                    AppLog.e(TAG, "telegram token save failed: ${it.javaClass.simpleName}")
+                }
+        }
     }
 
     fun setTelegramChatId(chatId: String) {

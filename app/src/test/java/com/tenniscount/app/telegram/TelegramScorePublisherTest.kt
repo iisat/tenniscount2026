@@ -5,6 +5,8 @@ import com.tenniscount.app.score.MatchState
 import com.tenniscount.app.score.Player
 import com.tenniscount.app.score.SetScore
 import com.tenniscount.app.score.SetState
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -137,6 +139,41 @@ class TelegramScorePublisherTest {
     }
 
     @Test
+    fun `finish during active live request remains the last published event`() = runBlocking {
+        val client = BlockingFirstSendClient()
+        val publisher = TelegramScorePublisher(client)
+        publisher.startSession()
+        val live = publisher.liveUpdate(configuration, state(pointsP1 = 1))
+        val liveJob = launch { live() }
+        client.firstSendStarted.await()
+
+        val finish = publisher.finish(configuration, state(gamesP1 = 3, gamesP2 = 2))
+        client.releaseFirstSend.complete(Unit)
+        finish()
+        liveJob.join()
+
+        assertEquals(listOf("send:1", "delete:1", "send:2"), client.calls)
+    }
+
+    @Test
+    fun `new match during active live request cannot inherit old message`() = runBlocking {
+        val client = BlockingFirstSendClient()
+        val publisher = TelegramScorePublisher(client)
+        publisher.startSession()
+        val oldLive = publisher.liveUpdate(configuration, state(pointsP1 = 1))
+        val oldJob = launch { oldLive() }
+        client.firstSendStarted.await()
+
+        publisher.startSession()
+        val newLive = publisher.liveUpdate(configuration, state(pointsP2 = 1))
+        client.releaseFirstSend.complete(Unit)
+        newLive()
+        oldJob.join()
+
+        assertEquals(listOf("send:1", "delete:1", "send:2"), client.calls)
+    }
+
+    @Test
     fun `disabled Telegram makes no API calls`() = runBlocking {
         val client = FakeTelegramClient()
         val publisher = TelegramScorePublisher(client)
@@ -173,6 +210,38 @@ class TelegramScorePublisherTest {
         completedSets = completedSets,
         currentSet = SetState(gamesP1, gamesP2, GameState(pointsP1, pointsP2)),
     )
+
+    private class BlockingFirstSendClient : TelegramClient {
+        val calls = mutableListOf<String>()
+        val firstSendStarted = CompletableDeferred<Unit>()
+        val releaseFirstSend = CompletableDeferred<Unit>()
+        private var nextMessageId = 1
+
+        override suspend fun sendMessage(token: String, chatId: String, text: String): Int {
+            val id = nextMessageId++
+            calls += "send:$id"
+            if (id == 1) {
+                firstSendStarted.complete(Unit)
+                releaseFirstSend.await()
+            }
+            return id
+        }
+
+        override suspend fun editMessage(
+            token: String,
+            chatId: String,
+            messageId: Int,
+            text: String,
+        ): Boolean {
+            calls += "edit:$messageId"
+            return true
+        }
+
+        override suspend fun deleteMessage(token: String, chatId: String, messageId: Int): Boolean {
+            calls += "delete:$messageId"
+            return true
+        }
+    }
 
     private class FakeTelegramClient : TelegramClient {
         val calls = mutableListOf<String>()

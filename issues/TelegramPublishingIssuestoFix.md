@@ -367,11 +367,11 @@ publisher.reset()
 
 Перед merge `feature/telegram_count_publish` → `develop`:
 
-- [ ] Все P1 закрыты.
+- [x] Все P1 закрыты.
 - [x] Bot token не попадает в backup.
 - [x] Bot token не попадает в release logcat.
 - [x] Все HTTP requests имеют timeout.
-- [ ] Telegram API failure не влияет на локальный матч.
+- [x] Telegram API failure не влияет на локальный матч.
 - [x] Finish — последнее Telegram-событие матча.
 - [x] New Match инвалидирует старую Telegram-session.
 - [x] Process restart корректно восстанавливает публикацию.
