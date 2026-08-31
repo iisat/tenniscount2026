@@ -85,23 +85,28 @@ class ScoreParserTest {
     }
 
     @Test
-    fun `одно число — сокращённое объявление с нулём принимающего`() {
-        // Движок часто слышит только первое слово: «15-0» → «пятнадцать».
+    fun `одно число не считается объявлением счёта`() {
+        assertNull(ScoreParser.parse("ноль"))
+        assertNull(ScoreParser.parse("нуль"))
+        assertNull(ScoreParser.parse("пятнадцать"))
+        assertNull(ScoreParser.parse("тридцать"))
+        assertNull(ScoreParser.parse("сорок"))
+        assertNull(ScoreParser.parse("40"))
+    }
+
+    @Test
+    fun `полные объявления счёта продолжают работать`() {
         assertEquals(
-            VoiceCommand.Score(Announcement.Points(serverPoints = 1, receiverPoints = 0)),
-            ScoreParser.parse("пятнадцать"),
+            VoiceCommand.Score(Announcement.Points(serverPoints = 2, receiverPoints = 3)),
+            ScoreParser.parse("тридцать сорок"),
         )
         assertEquals(
-            VoiceCommand.Score(Announcement.Points(serverPoints = 2, receiverPoints = 0)),
-            ScoreParser.parse("тридцать"),
+            VoiceCommand.Score(Announcement.Points(serverPoints = 3, receiverPoints = 2)),
+            ScoreParser.parse("сорок тридцать"),
         )
         assertEquals(
-            VoiceCommand.Score(Announcement.Points(serverPoints = 3, receiverPoints = 0)),
-            ScoreParser.parse("40"),
-        )
-        assertEquals(
-            VoiceCommand.Score(Announcement.Points(serverPoints = 0, receiverPoints = 0)),
-            ScoreParser.parse("ноль"),
+            VoiceCommand.Score(Announcement.Points(serverPoints = 1, receiverPoints = 3)),
+            ScoreParser.parse("пятнадцать сорок"),
         )
     }
 

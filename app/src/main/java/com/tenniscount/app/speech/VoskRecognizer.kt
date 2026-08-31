@@ -128,11 +128,22 @@ class VoskRecognizer(
     companion object {
         private const val SAMPLE_RATE = 16000.0f
 
-        /** Грамматика: только слова, которые несут счёт или команду. */
-        private val GRAMMAR = listOf(
-            "ноль", "нуль", "пятнадцать", "тридцать", "сорок",
-            "ровно", "больше", "меньше", "гейм", "сет", "сколько", "отмена", "отмени",
-            "[unk]",
-        ).joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
+        /**
+         * Грамматика: только полные допустимые фразы — объявления счёта
+         * из двух чисел и команды. Одиночные числовые слова не считаются
+         * полноценными фразами, поэтому split-распознавание не сможет
+         * пошагово изменить счёт.
+         */
+        internal val GRAMMAR = buildGrammar()
+
+        private fun buildGrammar(): String {
+            val scorePhrases = ScoreParser.NUMBER_WORDS.keys.flatMap { server ->
+                ScoreParser.NUMBER_WORDS.keys.map { receiver -> "$server $receiver" }
+            }
+            val commands = listOf(
+                "ровно", "больше", "меньше", "гейм", "сколько", "отмена", "отмени", "[unk]",
+            )
+            return (scorePhrases + commands).joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
+        }
     }
 }
