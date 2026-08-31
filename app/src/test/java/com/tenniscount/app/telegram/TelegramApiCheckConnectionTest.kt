@@ -73,42 +73,58 @@ class TelegramApiCheckConnectionTest {
 
     @Test
     fun `channel administrator with post permission can publish`() {
-        assertTrue(TelegramApi.canPublish("administrator", true, false))
+        assertTrue(TelegramApi.canPublish("channel", "administrator", true, false))
     }
 
     @Test
     fun `channel administrator without post permission cannot publish`() {
-        assertFalse(TelegramApi.canPublish("administrator", false, false))
+        assertFalse(TelegramApi.canPublish("channel", "administrator", false, false))
     }
 
     @Test
-    fun `group administrator with send permission can publish`() {
-        assertTrue(TelegramApi.canPublish("administrator", false, true))
+    fun `channel creator can publish`() {
+        assertTrue(TelegramApi.canPublish("channel", "creator", false, false))
     }
 
     @Test
-    fun `regular member can publish`() {
-        assertTrue(TelegramApi.canPublish("member", false, false))
+    fun `group administrator can publish without channel-specific post permission`() {
+        assertTrue(TelegramApi.canPublish("supergroup", "administrator", false, false))
     }
 
     @Test
-    fun `creator can publish`() {
-        assertTrue(TelegramApi.canPublish("creator", false, false))
+    fun `group member can publish`() {
+        assertTrue(TelegramApi.canPublish("group", "member", false, false))
     }
 
     @Test
-    fun `restricted user without send permission cannot publish`() {
-        assertFalse(TelegramApi.canPublish("restricted", false, false))
+    fun `group creator can publish`() {
+        assertTrue(TelegramApi.canPublish("supergroup", "creator", false, false))
     }
 
     @Test
-    fun `restricted user with send permission can publish`() {
-        assertTrue(TelegramApi.canPublish("restricted", false, true))
+    fun `group restricted user without send permission cannot publish`() {
+        assertFalse(TelegramApi.canPublish("supergroup", "restricted", false, false))
     }
 
     @Test
-    fun `left or kicked member cannot publish`() {
-        assertFalse(TelegramApi.canPublish("left", false, false))
-        assertFalse(TelegramApi.canPublish("kicked", false, false))
+    fun `group restricted user with send permission can publish`() {
+        assertTrue(TelegramApi.canPublish("supergroup", "restricted", false, true))
+    }
+
+    @Test
+    fun `left or kicked member cannot publish in group`() {
+        assertFalse(TelegramApi.canPublish("group", "left", false, false))
+        assertFalse(TelegramApi.canPublish("supergroup", "kicked", false, false))
+    }
+
+    @Test
+    fun `private chat active member can publish`() {
+        assertTrue(TelegramApi.canPublish("private", "member", false, false))
+    }
+
+    @Test
+    fun `private chat left or kicked user cannot publish`() {
+        assertFalse(TelegramApi.canPublish("private", "left", false, false))
+        assertFalse(TelegramApi.canPublish("private", "kicked", false, false))
     }
 }

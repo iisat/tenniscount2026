@@ -75,7 +75,10 @@ object TelegramApi {
 
     /**
      * Проверяет токен бота и возможность публиковать сообщения в чат.
-     * Последовательность: getMe (токен + id бота), getChatMember (права бота в чате).
+     * Последовательность:
+     *   1. getMe — валидность токена и id бота;
+     *   2. getChat — тип чата (channel/group/supergroup/private);
+     *   3. getChatMember — статус бота и права в чате.
      * Не логирует токен и не включает его в возвращаемый результат.
      */
     suspend fun checkConnection(token: String, chatId: String): TelegramCheckResult =
@@ -93,12 +96,26 @@ object TelegramApi {
             val botId = meJson.optJSONObject("result")?.optLong("id", 0L)?.takeIf { it > 0 }
                 ?: return@withContext TelegramCheckResult.NetworkError
 
+            val chatResponse = getChat(token, chatId)
+            val chatJson = chatResponse?.let { parseJson(it) }
+                ?: return@withContext TelegramCheckResult.NetworkError
+            if (!chatJson.optBoolean("ok", false)) {
+                return@withContext parseCheckResponse(chatResponse, isChatCheck = true)
+            }
+            val chatType = chatJson.optJSONObject("result")?.optString("type", "") ?: ""
+
             val memberResponse = getChatMember(token, chatId, botId)
-            parseChatMemberResult(memberResponse)
+            parseChatMemberResult(memberResponse, chatType)
         }
 
     private fun getMe(token: String): String? =
         get(URL("https://api.telegram.org/bot$token/getMe"))
+
+    private fun getChat(token: String, chatId: String): String? {
+        val url = URL("https://api.telegram.org/bot$token/getChat")
+        val body = JSONObject().apply { put("chat_id", chatId) }
+        return post(url, body.toString())
+    }
 
     private fun getChatMember(token: String, chatId: String, userId: Long): String? {
         val url = URL("https://api.telegram.org/bot$token/getChatMember")
@@ -145,9 +162,8 @@ object TelegramApi {
 
     /**
      * Преобразует ответ getChatMember в результат проверки прав на публикацию.
-     * Доступно для unit-тестов.
      */
-    internal fun parseChatMemberResult(response: String?): TelegramCheckResult {
+    private fun parseChatMemberResult(response: String?, chatType: String): TelegramCheckResult {
         if (response == null) return TelegramCheckResult.NetworkError
         val json = parseJson(response) ?: return TelegramCheckResult.NetworkError
         if (!json.optBoolean("ok", false)) {
@@ -159,7 +175,7 @@ object TelegramApi {
         val status = member.optString("status", "")
         val canPost = member.optBoolean("can_post_messages", false)
         val canSend = member.optBoolean("can_send_messages", false)
-        return if (canPublish(status, canPost, canSend)) {
+        return if (canPublish(chatType, status, canPost, canSend)) {
             TelegramCheckResult.Connected
         } else {
             TelegramCheckResult.ChatError
@@ -171,13 +187,22 @@ object TelegramApi {
      * Доступно для unit-тестов.
      */
     internal fun canPublish(
+        chatType: String,
         status: String,
         canPostMessages: Boolean,
         canSendMessages: Boolean,
-    ): Boolean = when (status.lowercase()) {
-        "administrator" -> canPostMessages || canSendMessages
-        "member", "creator" -> true
-        "restricted" -> canSendMessages
+    ): Boolean = when (chatType.lowercase()) {
+        "channel" -> when (status.lowercase()) {
+            "creator" -> true
+            "administrator" -> canPostMessages
+            else -> false
+        }
+        "group", "supergroup" -> when (status.lowercase()) {
+            "creator", "administrator", "member" -> true
+            "restricted" -> canSendMessages
+            else -> false
+        }
+        "private" -> status.lowercase() !in setOf("left", "kicked")
         else -> false
     }
 
