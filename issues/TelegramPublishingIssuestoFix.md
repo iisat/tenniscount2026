@@ -159,7 +159,7 @@ Reset
 
 ---
 
-### [ ] 5. Исправить восстановление трансляции после process restart
+### [x] 5. Исправить восстановление трансляции после process restart
 
 **Проблема**
 
@@ -189,13 +189,13 @@ lastTelegramState = null
 
 **Acceptance criteria**
 
-- [ ] Запустить live.
-- [ ] Убить process.
-- [ ] Восстановить матч.
-- [ ] Изменить счёт на одно очко.
-- [ ] Появляется новое live-сообщение.
-- [ ] Следующие очки редактируют его.
-- [ ] Старый `messageId` после restart не используется.
+- [x] Запустить live.
+- [x] Убить process.
+- [x] Восстановить матч.
+- [x] Изменить счёт на одно очко.
+- [x] Появляется новое live-сообщение.
+- [x] Следующие очки редактируют его.
+- [x] Старый `messageId` после restart не используется.
 
 ---
 
@@ -355,7 +355,7 @@ publisher.reset()
 2. [x] Исключить token из logging.
 3. [x] Добавить HTTP timeout.
 4. [x] Исправить sequencing/session race.
-5. [ ] Исправить restore после process death.
+5. [x] Исправить restore после process death.
 6. [ ] Сделать безопасный переход между live messages.
 7. [ ] Добавить FakeTelegramClient и regression tests.
 8. [ ] Добавить UI проверки/status.
@@ -374,7 +374,7 @@ publisher.reset()
 - [ ] Telegram API failure не влияет на локальный матч.
 - [x] Finish — последнее Telegram-событие матча.
 - [x] New Match инвалидирует старую Telegram-session.
-- [ ] Process restart корректно восстанавливает публикацию.
+- [x] Process restart корректно восстанавливает публикацию.
 - [ ] Network failure не приводит к необратимой потере live session.
 - [ ] Есть автоматические тесты Telegram state machine.
 - [ ] Выполнен smoke test на физическом Android-устройстве.
