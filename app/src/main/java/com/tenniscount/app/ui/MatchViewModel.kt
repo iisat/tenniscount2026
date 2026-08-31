@@ -3,6 +3,7 @@ package com.tenniscount.app.ui
 import android.Manifest
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -14,6 +15,8 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tenniscount.app.data.FinishedMatchEntity
@@ -97,6 +100,24 @@ data class MatchUiState(
 class MatchViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val secretsPrefs: SharedPreferences = run {
+        val masterKey = MasterKey.Builder(application, TELEGRAM_MASTER_KEY_ALIAS)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        val encrypted = EncryptedSharedPreferences.create(
+            application,
+            TELEGRAM_PREFS_NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+        val legacy = prefs.getString(KEY_TELEGRAM_TOKEN, null)
+        if (legacy != null && encrypted.getString(KEY_TELEGRAM_TOKEN, null).isNullOrBlank()) {
+            encrypted.edit { putString(KEY_TELEGRAM_TOKEN, legacy) }
+            prefs.edit { remove(KEY_TELEGRAM_TOKEN) }
+        }
+        encrypted
+    }
 
     private val _uiState = MutableStateFlow(
         // coerceIn: в старых версиях диапазон был 1.5–2.5 — значение подтягивается к 1.0–2.0.
@@ -111,7 +132,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             speakSetEnd = prefs.getBoolean(KEY_SPEAK_SET_END, true),
             strictValidation = prefs.getBoolean(KEY_STRICT_VALIDATION, true),
             telegramEnabled = prefs.getBoolean(KEY_TELEGRAM_ENABLED, false),
-            telegramToken = prefs.getString(KEY_TELEGRAM_TOKEN, null) ?: "",
+            telegramToken = secretsPrefs.getString(KEY_TELEGRAM_TOKEN, null) ?: "",
             telegramChatId = prefs.getString(KEY_TELEGRAM_CHAT_ID, null) ?: "",
         ),
     )
@@ -592,7 +613,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     fun setTelegramToken(token: String) {
         val trimmed = token.trim()
         _uiState.update { it.copy(telegramToken = trimmed) }
-        prefs.edit { putString(KEY_TELEGRAM_TOKEN, trimmed) }
+        secretsPrefs.edit { putString(KEY_TELEGRAM_TOKEN, trimmed) }
     }
 
     fun setTelegramChatId(chatId: String) {
@@ -935,6 +956,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         const val TAG = "MatchViewModel"
         const val PREFS_NAME = "settings"
+        const val TELEGRAM_PREFS_NAME = "telegram_secrets"
+        const val TELEGRAM_MASTER_KEY_ALIAS = "telegram_master_key"
         const val KEY_SIGNAL_VOLUME = "signal_volume"
         const val KEY_SPEAK_GAME_END = "speak_game_end"
         const val KEY_SPEAK_SET_POINT = "speak_set_point"

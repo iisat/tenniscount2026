@@ -13,7 +13,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -25,6 +30,8 @@ import com.tenniscount.app.ui.MatchViewModel
 
 @Composable
 fun MatchSetupScreen(state: MatchUiState, viewModel: MatchViewModel) {
+    val tokenVisible = remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
@@ -90,6 +97,12 @@ fun MatchSetupScreen(state: MatchUiState, viewModel: MatchViewModel) {
                 label = { Text(stringResource(R.string.telegram_token_label)) },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge,
+                visualTransformation = if (tokenVisible.value) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    TextButton(onClick = { tokenVisible.value = !tokenVisible.value }) {
+                        Text(if (tokenVisible.value) "Скрыть" else "Показать")
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
 
