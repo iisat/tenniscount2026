@@ -73,6 +73,99 @@ object TelegramApi {
         true
     }
 
+    /**
+     * Проверяет токен бота и доступность чата.
+     * Не логирует токен и не включает его в возвращаемый результат.
+     */
+    suspend fun checkConnection(token: String, chatId: String): TelegramCheckResult =
+        withContext(Dispatchers.IO) {
+            if (token.isBlank() || chatId.isBlank()) {
+                return@withContext TelegramCheckResult.NotConfigured
+            }
+
+            val meResponse = getMe(token)
+            val meResult = parseCheckResponse(meResponse, isChatCheck = false)
+            if (meResult != TelegramCheckResult.Connected) {
+                return@withContext meResult
+            }
+
+            val chatResponse = getChat(token, chatId)
+            parseCheckResponse(chatResponse, isChatCheck = true)
+        }
+
+    private fun getMe(token: String): String? =
+        get(URL("https://api.telegram.org/bot$token/getMe"))
+
+    private fun getChat(token: String, chatId: String): String? {
+        val url = URL("https://api.telegram.org/bot$token/getChat")
+        val body = JSONObject().apply { put("chat_id", chatId) }
+        return post(url, body.toString())
+    }
+
+    /**
+     * Преобразует сырой ответ Telegram API в результат проверки.
+     */
+    private fun parseCheckResponse(
+        response: String?,
+        isChatCheck: Boolean,
+    ): TelegramCheckResult {
+        if (response == null) return TelegramCheckResult.NetworkError
+        val json = parseJson(response) ?: return TelegramCheckResult.NetworkError
+        val ok = json.optBoolean("ok", false)
+        val description = json.optString("description", "")
+        val errorCode = json.optInt("error_code", 0)
+        return mapCheckResult(ok, errorCode, description, isChatCheck)
+    }
+
+    /**
+     * Чистая функция классификации ответа Telegram API.
+     * Вынесена отдельно, чтобы unit-тесты не зависели от Android-реализации JSONObject.
+     */
+    internal fun mapCheckResult(
+        ok: Boolean,
+        errorCode: Int,
+        description: String,
+        isChatCheck: Boolean,
+    ): TelegramCheckResult {
+        if (ok) return TelegramCheckResult.Connected
+        val lower = description.lowercase()
+        return when {
+            isUnauthorized(lower, errorCode) -> TelegramCheckResult.AuthError
+            isChatCheck && isChatAccessError(lower, errorCode) -> TelegramCheckResult.ChatError
+            else -> TelegramCheckResult.NetworkError
+        }
+    }
+
+    private fun isUnauthorized(description: String, errorCode: Int): Boolean =
+        errorCode == 401 || description.contains("unauthorized")
+
+    private fun isChatAccessError(description: String, errorCode: Int): Boolean =
+        errorCode == 403 ||
+            errorCode == 400 ||
+            description.contains("chat not found") ||
+            description.contains("chat_id") ||
+            description.contains("wrong") ||
+            description.contains("blocked") ||
+            description.contains("kicked") ||
+            description.contains("not a member") ||
+            description.contains("forbidden")
+
+    private fun get(url: URL): String? = runCatching {
+        val conn = url.openConnection() as HttpsURLConnection
+        try {
+            configureTimeouts(conn)
+            conn.requestMethod = "GET"
+            val code = conn.responseCode
+            if (code !in 200..299) AppLog.w(TAG, "Telegram API returned HTTP $code")
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            BufferedReader(InputStreamReader(stream, "UTF-8")).use { it.readText() }
+        } finally {
+            conn.disconnect()
+        }
+    }.onFailure {
+        AppLog.w(TAG, requestFailureMessage(it))
+    }.getOrNull()
+
     private fun post(url: URL, body: String): String? = runCatching {
         val conn = url.openConnection() as HttpsURLConnection
         try {

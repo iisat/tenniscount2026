@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.tenniscount.app.R
 import com.tenniscount.app.score.Player
+import com.tenniscount.app.telegram.TelegramCheckResult
 import com.tenniscount.app.ui.MatchUiState
 import com.tenniscount.app.ui.MatchViewModel
 
@@ -114,6 +115,25 @@ fun MatchSetupScreen(state: MatchUiState, viewModel: MatchViewModel) {
                 textStyle = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            val status = telegramStatusText(state.telegramCheckStatus)
+            if (status != null) {
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = telegramStatusColor(state.telegramCheckStatus),
+                )
+            }
+
+            OutlinedButton(
+                onClick = viewModel::checkTelegram,
+                enabled = state.telegramToken.isNotBlank() &&
+                    state.telegramChatId.isNotBlank() &&
+                    state.telegramCheckStatus != TelegramCheckResult.Checking,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.telegram_check))
+            }
         }
 
         Button(
@@ -138,4 +158,24 @@ fun MatchSetupScreen(state: MatchUiState, viewModel: MatchViewModel) {
             )
         }
     }
+}
+
+@Composable
+private fun telegramStatusText(status: TelegramCheckResult): String? = when (status) {
+    TelegramCheckResult.NotConfigured -> stringResource(R.string.telegram_status_not_configured)
+    TelegramCheckResult.Unchecked -> null
+    TelegramCheckResult.Checking -> stringResource(R.string.telegram_status_checking)
+    TelegramCheckResult.Connected -> stringResource(R.string.telegram_status_connected)
+    TelegramCheckResult.AuthError -> stringResource(R.string.telegram_status_auth_error)
+    TelegramCheckResult.ChatError -> stringResource(R.string.telegram_status_chat_error)
+    TelegramCheckResult.NetworkError -> stringResource(R.string.telegram_status_network_error)
+}
+
+@Composable
+private fun telegramStatusColor(status: TelegramCheckResult) = when (status) {
+    TelegramCheckResult.Connected -> androidx.compose.ui.graphics.Color(0xFF2E7D32)
+    TelegramCheckResult.AuthError,
+    TelegramCheckResult.ChatError,
+    TelegramCheckResult.NetworkError -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.onSurface
 }

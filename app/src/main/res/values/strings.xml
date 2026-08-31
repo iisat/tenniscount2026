@@ -45,6 +45,13 @@
     <string name="telegram_title">Трансляция в Telegram</string>
     <string name="telegram_token_label">Токен бота</string>
     <string name="telegram_chat_id_label">ID группы</string>
+    <string name="telegram_check">Проверить Telegram</string>
+    <string name="telegram_status_not_configured">Telegram: не настроен</string>
+    <string name="telegram_status_checking">Telegram: проверка…</string>
+    <string name="telegram_status_connected">Telegram: ✓ подключён</string>
+    <string name="telegram_status_auth_error">Telegram: ошибка авторизации</string>
+    <string name="telegram_status_chat_error">Telegram: нет доступа к чату</string>
+    <string name="telegram_status_network_error">Telegram: ошибка сети</string>
 
     <string name="history_title">История матчей</string>
     <string name="history_empty">Завершённых матчей пока нет</string>

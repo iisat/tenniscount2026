@@ -37,6 +37,7 @@ import com.tenniscount.app.speech.ScoreParser
 import com.tenniscount.app.speech.VoiceCommand
 import com.tenniscount.app.speech.VoskRecognizer
 import com.tenniscount.app.telegram.TelegramApi
+import com.tenniscount.app.telegram.TelegramCheckResult
 import com.tenniscount.app.telegram.TelegramOperationSequencer
 import com.tenniscount.app.telegram.TelegramScoreFormatter
 import com.tenniscount.app.util.AppLog
@@ -89,6 +90,8 @@ data class MatchUiState(
     val telegramToken: String = "",
     /** ID группы/канала для публикации. */
     val telegramChatId: String = "",
+    /** Состояние проверки подключения к Telegram. */
+    val telegramCheckStatus: TelegramCheckResult = TelegramCheckResult.NotConfigured,
 ) {
     fun name(player: Player): String = when (player) {
         Player.ONE -> player1Name
@@ -119,21 +122,34 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private val _uiState = MutableStateFlow(
-        // coerceIn: в старых версиях диапазон был 1.5–2.5 — значение подтягивается к 1.0–2.0.
-        MatchUiState(
-            player1Name = prefs.getString(KEY_PLAYER1_NAME, null) ?: "Игрок 1",
-            player2Name = prefs.getString(KEY_PLAYER2_NAME, null) ?: "Игрок 2",
-            firstServer = prefs.getString(KEY_FIRST_SERVER, null)
-                ?.let { runCatching { Player.valueOf(it) }.getOrNull() } ?: Player.ONE,
-            signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 2f).coerceIn(1f, 2f),
-            speakGameEnd = prefs.getBoolean(KEY_SPEAK_GAME_END, true),
-            speakSetPoint = prefs.getBoolean(KEY_SPEAK_SET_POINT, true),
-            speakSetEnd = prefs.getBoolean(KEY_SPEAK_SET_END, true),
-            strictValidation = prefs.getBoolean(KEY_STRICT_VALIDATION, true),
-            telegramEnabled = prefs.getBoolean(KEY_TELEGRAM_ENABLED, false),
-            telegramToken = secretsPrefs.getString(KEY_TELEGRAM_TOKEN, null) ?: "",
-            telegramChatId = prefs.getString(KEY_TELEGRAM_CHAT_ID, null) ?: "",
-        ),
+        run {
+            val telegramEnabled = prefs.getBoolean(KEY_TELEGRAM_ENABLED, false)
+            val telegramToken = secretsPrefs.getString(KEY_TELEGRAM_TOKEN, null) ?: ""
+            val telegramChatId = prefs.getString(KEY_TELEGRAM_CHAT_ID, null) ?: ""
+            val telegramCheckStatus = if (
+                telegramEnabled && telegramToken.isNotBlank() && telegramChatId.isNotBlank()
+            ) {
+                TelegramCheckResult.Unchecked
+            } else {
+                TelegramCheckResult.NotConfigured
+            }
+            // coerceIn: в старых версиях диапазон был 1.5–2.5 — значение подтягивается к 1.0–2.0.
+            MatchUiState(
+                player1Name = prefs.getString(KEY_PLAYER1_NAME, null) ?: "Игрок 1",
+                player2Name = prefs.getString(KEY_PLAYER2_NAME, null) ?: "Игрок 2",
+                firstServer = prefs.getString(KEY_FIRST_SERVER, null)
+                    ?.let { runCatching { Player.valueOf(it) }.getOrNull() } ?: Player.ONE,
+                signalVolume = prefs.getFloat(KEY_SIGNAL_VOLUME, 2f).coerceIn(1f, 2f),
+                speakGameEnd = prefs.getBoolean(KEY_SPEAK_GAME_END, true),
+                speakSetPoint = prefs.getBoolean(KEY_SPEAK_SET_POINT, true),
+                speakSetEnd = prefs.getBoolean(KEY_SPEAK_SET_END, true),
+                strictValidation = prefs.getBoolean(KEY_STRICT_VALIDATION, true),
+                telegramEnabled = telegramEnabled,
+                telegramToken = telegramToken,
+                telegramChatId = telegramChatId,
+                telegramCheckStatus = telegramCheckStatus,
+            )
+        },
     )
     val uiState: StateFlow<MatchUiState> = _uiState.asStateFlow()
 
@@ -389,6 +405,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
             telegramEnabled = s.telegramEnabled,
             telegramToken = s.telegramToken,
             telegramChatId = s.telegramChatId,
+            telegramCheckStatus = s.telegramCheckStatus,
         )
     }
 
@@ -615,20 +632,52 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setTelegramEnabled(enabled: Boolean) {
-        _uiState.update { it.copy(telegramEnabled = enabled) }
+        _uiState.update {
+            it.copy(
+                telegramEnabled = enabled,
+                telegramCheckStatus = TelegramCheckResult.Unchecked,
+            )
+        }
         prefs.edit { putBoolean(KEY_TELEGRAM_ENABLED, enabled) }
     }
 
     fun setTelegramToken(token: String) {
         val trimmed = token.trim()
-        _uiState.update { it.copy(telegramToken = trimmed) }
+        _uiState.update {
+            it.copy(
+                telegramToken = trimmed,
+                telegramCheckStatus = TelegramCheckResult.Unchecked,
+            )
+        }
         secretsPrefs.edit { putString(KEY_TELEGRAM_TOKEN, trimmed) }
     }
 
     fun setTelegramChatId(chatId: String) {
         val trimmed = chatId.trim()
-        _uiState.update { it.copy(telegramChatId = trimmed) }
+        _uiState.update {
+            it.copy(
+                telegramChatId = trimmed,
+                telegramCheckStatus = TelegramCheckResult.Unchecked,
+            )
+        }
         prefs.edit { putString(KEY_TELEGRAM_CHAT_ID, trimmed) }
+    }
+
+    /**
+     * Проверяет токен и доступ к чату Telegram. Результат попадает в UI state.
+     * Не блокирует начало матча: вызывается только по кнопке.
+     */
+    fun checkTelegram() {
+        val s = _uiState.value
+        if (!s.telegramEnabled || s.telegramToken.isBlank() || s.telegramChatId.isBlank()) {
+            _uiState.update { it.copy(telegramCheckStatus = TelegramCheckResult.NotConfigured) }
+            return
+        }
+        _uiState.update { it.copy(telegramCheckStatus = TelegramCheckResult.Checking) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = TelegramApi.checkConnection(s.telegramToken, s.telegramChatId)
+            _uiState.update { it.copy(telegramCheckStatus = result) }
+        }
     }
 
     /**
