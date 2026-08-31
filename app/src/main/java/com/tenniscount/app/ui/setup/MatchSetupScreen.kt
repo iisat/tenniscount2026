@@ -11,6 +11,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -65,6 +66,41 @@ fun MatchSetupScreen(state: MatchUiState, viewModel: MatchViewModel) {
                     },
                 )
             }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.telegram_title),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Switch(
+                checked = state.telegramEnabled,
+                onCheckedChange = viewModel::setTelegramEnabled,
+            )
+        }
+
+        if (state.telegramEnabled) {
+            OutlinedTextField(
+                value = state.telegramToken,
+                onValueChange = viewModel::setTelegramToken,
+                label = { Text(stringResource(R.string.telegram_token_label)) },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = state.telegramChatId,
+                onValueChange = viewModel::setTelegramChatId,
+                label = { Text(stringResource(R.string.telegram_chat_id_label)) },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         Button(

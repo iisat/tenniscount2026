@@ -42,6 +42,10 @@
     <string name="apply">Применить</string>
     <string name="cancel">Отмена</string>
 
+    <string name="telegram_title">Трансляция в Telegram</string>
+    <string name="telegram_token_label">Токен бота</string>
+    <string name="telegram_chat_id_label">ID группы</string>
+
     <string name="history_title">История матчей</string>
     <string name="history_empty">Завершённых матчей пока нет</string>
     <string name="back">Назад</string>
