@@ -72,13 +72,40 @@ class TelegramScorePublisherTest {
     @Test
     fun `restore mid-game starts a new publishing session`() = runBlocking {
         val client = FakeTelegramClient()
+        val oldPublisher = TelegramScorePublisher(client)
+        oldPublisher.startSession()
+        oldPublisher.liveUpdate(configuration, state(gamesP1 = 2, pointsP1 = 1, pointsP2 = 1))()
+
+        val restoredPublisher = TelegramScorePublisher(client)
+        restoredPublisher.startSession()
+        restoredPublisher.liveUpdate(configuration, state(gamesP1 = 2, pointsP1 = 2, pointsP2 = 1))()
+
+        assertEquals(listOf("send:1", "send:2"), client.calls)
+    }
+
+    @Test
+    fun `finish sends final message then deletes live message`() = runBlocking {
+        val client = FakeTelegramClient()
         val publisher = TelegramScorePublisher(client)
         publisher.startSession()
+        publisher.liveUpdate(configuration, state())()
 
-        publisher.liveUpdate(configuration, state(gamesP1 = 2, pointsP1 = 2))()
-        publisher.liveUpdate(configuration, state(gamesP1 = 2, pointsP1 = 3))()
+        publisher.finish(configuration, state(gamesP1 = 3, gamesP2 = 2))()
 
-        assertEquals(listOf("send:1", "edit:1"), client.calls)
+        assertEquals(listOf("send:1", "send:2", "delete:1"), client.calls)
+    }
+
+    @Test
+    fun `failed final send keeps live message`() = runBlocking {
+        val client = FakeTelegramClient()
+        val publisher = TelegramScorePublisher(client)
+        publisher.startSession()
+        publisher.liveUpdate(configuration, state())()
+        client.failNextSend = true
+
+        publisher.finish(configuration, state(gamesP1 = 3, gamesP2 = 2))()
+
+        assertEquals(listOf("send:1", "send:failed"), client.calls)
     }
 
     @Test
