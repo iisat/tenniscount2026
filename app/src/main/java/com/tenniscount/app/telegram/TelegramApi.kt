@@ -26,7 +26,7 @@ object TelegramApi {
             val response = post(url, body.toString()) ?: return@withContext null
             val json = parseJson(response) ?: return@withContext null
             if (!json.optBoolean("ok", false)) {
-                AppLog.w(TAG, "sendMessage failed: ${json.optString("description")}")
+                AppLog.w(TAG, apiErrorMessage(json.optString("description"), token))
                 return@withContext null
             }
             json.optJSONObject("result")?.optInt("message_id", -1)?.takeIf { it != -1 }
@@ -47,7 +47,7 @@ object TelegramApi {
         val response = post(url, body.toString()) ?: return@withContext false
         val json = parseJson(response) ?: return@withContext false
         if (!json.optBoolean("ok", false)) {
-            AppLog.w(TAG, "editMessageText failed: ${json.optString("description")}")
+            AppLog.w(TAG, apiErrorMessage(json.optString("description"), token))
             return@withContext false
         }
         true
@@ -65,7 +65,11 @@ object TelegramApi {
         }
         val response = post(url, body.toString()) ?: return@withContext false
         val json = parseJson(response) ?: return@withContext false
-        json.optBoolean("ok", false)
+        if (!json.optBoolean("ok", false)) {
+            AppLog.w(TAG, apiErrorMessage(json.optString("description"), token))
+            return@withContext false
+        }
+        true
     }
 
     private fun post(url: URL, body: String): String? = runCatching {
@@ -76,18 +80,27 @@ object TelegramApi {
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
             conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
+            if (code !in 200..299) AppLog.w(TAG, "Telegram API returned HTTP $code")
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             BufferedReader(InputStreamReader(stream, "UTF-8")).use { it.readText() }
         } finally {
             conn.disconnect()
         }
     }.onFailure {
-        AppLog.w(TAG, "Telegram request error", it)
+        AppLog.w(TAG, requestFailureMessage(it))
     }.getOrNull()
 
     private fun parseJson(response: String): JSONObject? = runCatching {
         JSONObject(response)
     }.onFailure {
-        AppLog.w(TAG, "Telegram response parse error", it)
+        AppLog.w(TAG, "Telegram response parse failed: ${it.javaClass.simpleName}")
     }.getOrNull()
+
+    internal fun requestFailureMessage(error: Throwable): String =
+        "Telegram request failed: ${error.javaClass.simpleName.ifBlank { "Throwable" }}"
+
+    internal fun apiErrorMessage(description: String, token: String): String {
+        val safeDescription = if (token.isEmpty()) description else description.replace(token, "[redacted]")
+        return "Telegram API error: $safeDescription"
+    }
 }

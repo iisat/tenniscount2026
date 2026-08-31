@@ -33,7 +33,7 @@ Bot token является credential и не должен попадать в b
 
 ---
 
-### [ ] 2. Исключить утечку bot token через логи и исключения
+### [x] 2. Исключить утечку bot token через логи и исключения
 
 **Проблема**
 
@@ -64,10 +64,10 @@ Telegram API error: Unauthorized
 
 **Acceptance criteria**
 
-- [ ] Token отсутствует во всех `Log.*` / `AppLog.*`.
-- [ ] Token отсутствует в пользовательских error messages.
-- [ ] Ошибки остаются диагностируемыми.
-- [ ] Есть regression test/sanitizer test с exception, содержащим URL с token.
+- [x] Token отсутствует во всех `Log.*` / `AppLog.*`.
+- [x] Token отсутствует в пользовательских error messages.
+- [x] Ошибки остаются диагностируемыми.
+- [x] Есть regression test/sanitizer test с exception, содержащим URL с token.
 
 ---
 
@@ -352,7 +352,7 @@ publisher.reset()
 # Suggested implementation order
 
 1. [x] Защитить bot token и убрать из backup.
-2. [ ] Исключить token из logging.
+2. [x] Исключить token из logging.
 3. [ ] Добавить HTTP timeout.
 4. [ ] Исправить sequencing/session race.
 5. [ ] Исправить restore после process death.
@@ -369,7 +369,7 @@ publisher.reset()
 
 - [ ] Все P1 закрыты.
 - [x] Bot token не попадает в backup.
-- [ ] Bot token не попадает в release logcat.
+- [x] Bot token не попадает в release logcat.
 - [ ] Все HTTP requests имеют timeout.
 - [ ] Telegram API failure не влияет на локальный матч.
 - [ ] Finish — последнее Telegram-событие матча.
