@@ -281,7 +281,7 @@ Telegram остаётся optional и не должен блокировать �
 
 ---
 
-### [ ] 8. Добавить unit/integration tests для Telegram state machine
+### [x] 8. Добавить unit/integration tests для Telegram state machine
 
 Желательно ввести:
 
@@ -297,19 +297,19 @@ interface TelegramClient {
 
 **Минимальные тесты**
 
-- [ ] initial score → `sendMessage`;
-- [ ] следующее очко → `editMessage`;
-- [ ] несколько очков редактируют один `messageId`;
-- [ ] новый гейм → новый message;
-- [ ] новый сет → новый message;
-- [ ] restore mid-game → первое изменение создаёт новый message;
-- [ ] failed send не продвигает state;
-- [ ] failed edit можно повторить;
+- [x] initial score → `sendMessage`;
+- [x] следующее очко → `editMessage`;
+- [x] несколько очков редактируют один `messageId`;
+- [x] новый гейм → новый message;
+- [x] новый сет → новый message;
+- [x] restore mid-game → первое изменение создаёт новый message;
+- [x] failed send не продвигает state;
+- [x] failed edit можно повторить;
 - [x] rapid updates сохраняют порядок;
 - [x] Finish при queued update остаётся последним;
 - [x] New Match инвалидирует operations старого матча;
-- [ ] final formatter корректен при незавершённом текущем сете;
-- [ ] Telegram disabled → 0 API calls.
+- [x] final formatter корректен при незавершённом текущем сете;
+- [x] Telegram disabled → 0 API calls.
 
 ---
 
@@ -357,7 +357,7 @@ publisher.reset()
 4. [x] Исправить sequencing/session race.
 5. [x] Исправить restore после process death.
 6. [x] Сделать безопасный переход между live messages.
-7. [ ] Добавить FakeTelegramClient и regression tests.
+7. [x] Добавить FakeTelegramClient и regression tests.
 8. [x] Добавить UI проверки/status.
 9. [ ] Завершить вынос `TelegramScorePublisher`, если он не был сделан в рамках #4–#6.
 
@@ -376,7 +376,7 @@ publisher.reset()
 - [x] New Match инвалидирует старую Telegram-session.
 - [x] Process restart корректно восстанавливает публикацию.
 - [x] Network failure не приводит к необратимой потере live session.
-- [ ] Есть автоматические тесты Telegram state machine.
+- [x] Есть автоматические тесты Telegram state machine.
 - [ ] Выполнен smoke test на физическом Android-устройстве.
 
 ---

@@ -37,9 +37,9 @@ import com.tenniscount.app.speech.ScoreParser
 import com.tenniscount.app.speech.VoiceCommand
 import com.tenniscount.app.speech.VoskRecognizer
 import com.tenniscount.app.telegram.TelegramApi
+import com.tenniscount.app.telegram.TelegramApiClient
 import com.tenniscount.app.telegram.TelegramCheckResult
-import com.tenniscount.app.telegram.TelegramOperationSequencer
-import com.tenniscount.app.telegram.TelegramScoreFormatter
+import com.tenniscount.app.telegram.TelegramScorePublisher
 import com.tenniscount.app.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -161,14 +161,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
     /** Последнее записанное в prefs состояние — чтобы не переписывать его без изменений. */
     private var lastPersistedState: String? = null
 
-    /** ID живого сообщения со счётом в Telegram. */
-    private var telegramMessageId: Int? = null
-
-    /** Последнее опубликованное/отправленное в Telegram состояние. */
-    private var lastTelegramState: MatchState? = null
-
-    /** Сериализует Telegram-операции и инвалидирует события завершённых матчей. */
-    private val telegramSequencer = TelegramOperationSequencer()
+    private val telegramPublisher = TelegramScorePublisher(TelegramApiClient)
 
     private val controller = ListeningController.get(application)
     private val db = MatchDatabase.get(application)
@@ -314,9 +307,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         engine = MatchEngine(_uiState.value.firstServer)
             .also { it.strictValidation = _uiState.value.strictValidation }
         lastSyncedState = null
-        telegramSequencer.nextSession()
-        telegramMessageId = null
-        lastTelegramState = null
+        telegramPublisher.startSession()
         sync(screen = Screen.SCOREBOARD)
     }
 
@@ -368,15 +359,8 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         stopListening()
         if (state != null) {
             saveMatch(state, s.player1Name, s.player2Name)
-            val telegramConfigured =
-                s.telegramEnabled && s.telegramToken.isNotBlank() && s.telegramChatId.isNotBlank()
-            if (telegramConfigured) {
-                val oldMessageId = telegramMessageId
-                val ticket = telegramSequencer.nextFinalSession()
-                publishFinal(state, s.player1Name, s.player2Name, oldMessageId, ticket)
-            } else {
-                telegramSequencer.nextSession()
-            }
+            val operation = telegramPublisher.finish(s.telegramConfiguration(), state)
+            viewModelScope.launch(Dispatchers.IO) { operation() }
         }
         // Матч завершён — сохранённый слепок больше не нужен.
         clearPersistedMatch()
@@ -389,9 +373,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         val s = _uiState.value
         engine = null
         lastSyncedState = null
-        telegramSequencer.nextSession()
-        telegramMessageId = null
-        lastTelegramState = null
+        telegramPublisher.startSession()
         clearPersistedMatch()
         _uiState.value = MatchUiState(
             player1Name = s.player1Name,
@@ -912,8 +894,7 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
         lastSyncedState = state
         // Telegram-публикация не восстанавливается: при следующем изменении
         // будет отправлено новое сообщение, т.к. старое message_id не сохраняется.
-        telegramMessageId = null
-        lastTelegramState = null
+        telegramPublisher.startSession()
         // И оно уже лежит в prefs — первый sync() после рестарта не должен
         // перезаписывать файл настроек тем же значением.
         lastPersistedState = saved
@@ -968,72 +949,18 @@ class MatchViewModel(application: Application) : AndroidViewModel(application) {
      * и создаётся новое (чтобы пришло уведомление).
      */
     private fun triggerTelegramUpdate() {
-        val s = _uiState.value
-        if (!s.telegramEnabled || s.telegramToken.isBlank() || s.telegramChatId.isBlank()) return
-        val new = engine?.state ?: return
-        val ticket = telegramSequencer.nextOperation()
-        viewModelScope.launch(Dispatchers.IO) {
-            telegramSequencer.execute(ticket) {
-                val prev = lastTelegramState
-                if (new == prev) return@execute
-                val gameOrSetChanged =
-                    prev == null ||
-                        new.completedSets.size != prev.completedSets.size ||
-                        new.totalGames != prev.totalGames
-                val token = s.telegramToken
-                val chatId = s.telegramChatId
-                if (gameOrSetChanged) {
-                    val oldId = telegramMessageId
-                    val text = TelegramScoreFormatter.liveMessage(new, s.player1Name, s.player2Name)
-                    val newId = TelegramApi.sendMessage(token, chatId, text)
-                    if (newId != null) {
-                        val committed = telegramSequencer.commitIfCurrent(ticket) {
-                            telegramMessageId = newId
-                            lastTelegramState = new
-                        }
-                        if (committed) {
-                            if (oldId != null) TelegramApi.deleteMessage(token, chatId, oldId)
-                        } else {
-                            TelegramApi.deleteMessage(token, chatId, newId)
-                        }
-                    }
-                } else {
-                    val messageId = telegramMessageId ?: return@execute
-                    val text = TelegramScoreFormatter.liveMessage(new, s.player1Name, s.player2Name)
-                    val edited = TelegramApi.editMessageText(token, chatId, messageId, text)
-                    if (edited) {
-                        telegramSequencer.commitIfCurrent(ticket) { lastTelegramState = new }
-                    }
-                }
-            }
-        }
+        val state = engine?.state ?: return
+        val operation = telegramPublisher.liveUpdate(_uiState.value.telegramConfiguration(), state)
+        viewModelScope.launch(Dispatchers.IO) { operation() }
     }
 
-    /** Публикует финальный счёт с комментарием «Матч завершен». */
-    private fun publishFinal(
-        state: MatchState,
-        player1Name: String,
-        player2Name: String,
-        oldMessageId: Int?,
-        ticket: TelegramOperationSequencer.Ticket,
-    ) {
-        val s = _uiState.value
-        val token = s.telegramToken
-        val chatId = s.telegramChatId
-        viewModelScope.launch(Dispatchers.IO) {
-            telegramSequencer.execute(ticket) {
-                val text = TelegramScoreFormatter.finalMessage(state, player1Name, player2Name)
-                val sent = TelegramApi.sendMessage(token, chatId, text)
-                if (sent != null) {
-                    telegramSequencer.commitIfCurrent(ticket) {
-                        telegramMessageId = null
-                        lastTelegramState = null
-                    }
-                    if (oldMessageId != null) TelegramApi.deleteMessage(token, chatId, oldMessageId)
-                }
-            }
-        }
-    }
+    private fun MatchUiState.telegramConfiguration() = TelegramScorePublisher.Configuration(
+        enabled = telegramEnabled,
+        token = telegramToken,
+        chatId = telegramChatId,
+        player1Name = player1Name,
+        player2Name = player2Name,
+    )
 
     private companion object {
         const val TAG = "MatchViewModel"
