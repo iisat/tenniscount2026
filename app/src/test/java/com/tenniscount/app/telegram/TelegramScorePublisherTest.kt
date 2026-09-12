@@ -187,6 +187,31 @@ class TelegramScorePublisherTest {
     }
 
     @Test
+    fun `live message appends completed set scores in parentheses`() {
+        val match = state(completedSets = listOf(SetScore(4, 6)), gamesP1 = 3, gamesP2 = 2)
+
+        val text = TelegramScoreFormatter.liveMessage(match, "Анна", "Борис")
+
+        assertTrue(text.contains("Сеты: 0:1 (4:6)"))
+    }
+
+    @Test
+    fun `live message lists each completed set in parentheses`() {
+        val match = state(completedSets = listOf(SetScore(6, 4), SetScore(3, 6)), gamesP1 = 1)
+
+        val text = TelegramScoreFormatter.liveMessage(match, "Анна", "Борис")
+
+        assertTrue(text.contains("Сеты: 1:1 (6:4, 3:6)"))
+    }
+
+    @Test
+    fun `live message omits parentheses without completed sets`() {
+        val text = TelegramScoreFormatter.liveMessage(state(gamesP1 = 2), "Анна", "Борис")
+
+        assertTrue(text.contains("Сеты: 0:0\n") || text.endsWith("Сеты: 0:0"))
+    }
+
+    @Test
     fun `final formatter includes unfinished current set`() {
         val match = state(
             completedSets = listOf(SetScore(6, 4)),

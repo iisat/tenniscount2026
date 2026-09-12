@@ -14,7 +14,9 @@ object TelegramScoreFormatter {
         val game = state.currentSet.currentGame
         val points = "${game.displayPoints(Player.ONE)}:${game.displayPoints(Player.TWO)}"
         val games = "${state.currentSet.gamesP1}:${state.currentSet.gamesP2}"
-        val sets = "${MatchSummary.setsWon(state, Player.ONE)}:${MatchSummary.setsWon(state, Player.TWO)}"
+        val completed = state.completedSets
+        val sets = "${MatchSummary.setsWon(state, Player.ONE)}:${MatchSummary.setsWon(state, Player.TWO)}" +
+            if (completed.isNotEmpty()) " (${completed.joinToString(", ")})" else ""
         return "Матч: $player1Name — $player2Name\nОчки: $points\nГеймы: $games\nСеты: $sets"
     }
 
